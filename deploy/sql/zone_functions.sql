@@ -1,0 +1,26 @@
+
+-- deploy/sql/zone_functions.sql
+-- Status: DEPLOYED 2026-06-06
+-- Three Supabase RPC functions that power the two composite zone endpoints.
+--
+-- events_nearby(lat, lng, radius_km, from_date, to_date, max_rows)
+--   → proximity-sorted upcoming events with distance_km field
+--   → used by /api/events/nearby and internally by coming_up()
+--
+-- now_feed(lat, lng, radius_km)
+--   → composite NOW zone: hot events + nearby venues + campaigns + title holders
+--   → used by GET /api/now
+--   → returns JSON with four arrays in one DB round-trip
+--
+-- coming_up(lat, lng, radius_km, season, from_date, to_date, event_type, country, max_rows)
+--   → composite COMING UP / trip planner: events + venues + clubs
+--   → used by GET /api/coming-up
+--   → season mapping: spring=Mar-May, summer=Jun-Aug, autumn=Sep-Nov, winter=Dec-Feb
+--
+-- To redeploy: copy the function bodies from the migration named
+-- 'events_nearby_rpc' in the Supabase migrations table.
+--
+-- To test:
+-- SELECT * FROM events_nearby(45.42, -75.70, 2000); -- from Ottawa, 2000km
+-- SELECT now_feed(45.42, -75.70, 500);              -- NOW zone near Ottawa
+-- SELECT coming_up(NULL, NULL, NULL, 'autumn', NULL, NULL, NULL, 'Germany'); -- Germany autumn

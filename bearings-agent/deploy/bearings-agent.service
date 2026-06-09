@@ -1,0 +1,24 @@
+
+[Unit]
+Description=Bearings Treasury Monitor Agent
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bearings
+WorkingDirectory=/opt/bearings-agent
+ExecStart=/opt/bearings-agent/bearings-agent
+Restart=always
+RestartSec=30
+EnvironmentFile=/opt/bearings-agent/.env
+
+# Security hardening — this binary never touches keys directly
+# but belt-and-suspenders on the filesystem
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/bearings-agent/logs
+
+[Install]
+WantedBy=multi-user.target

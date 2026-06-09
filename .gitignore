@@ -1,0 +1,24 @@
+
+# Build artifacts
+target/
+dist/
+
+# Secrets — never commit these
+.env
+.env.local
+.env.production
+secrets.toml
+*.key
+*.pem
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

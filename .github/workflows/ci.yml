@@ -1,0 +1,82 @@
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  check:
+    name: Check + Test + Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: cargo check
+        run: cargo check --workspace
+
+      - name: cargo test (unit tests in src/ — no Supabase needed)
+        # --lib runs #[cfg(test)] modules inside src/ only
+        # Integration tests in tests/ are excluded here (need live Supabase)
+        run: cargo test --workspace --lib
+
+      - name: cargo clippy
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: cargo fmt check
+        run: cargo fmt --all -- --check
+
+  build-release:
+    name: Release Build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: cargo build --release
+        run: cargo build --release --workspace
+
+      - name: Upload backend binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: bearings-backend
+          path: target/release/bearings-backend
+
+      - name: Upload agent binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: bearings-agent
+          path: target/release/bearings-agent

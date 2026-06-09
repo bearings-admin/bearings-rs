@@ -1,0 +1,26 @@
+
+[Unit]
+Description=Bearings API Backend (Axum)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bearings
+WorkingDirectory=/opt/bearings-backend
+ExecStart=/opt/bearings-backend/bearings-backend
+Restart=always
+RestartSec=5
+
+# Environment — copy .env values here or use EnvironmentFile
+EnvironmentFile=/opt/bearings-backend/.env
+Environment=RUST_LOG=info
+
+# Security hardening
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/bearings-backend/logs
+
+[Install]
+WantedBy=multi-user.target
