@@ -10,10 +10,10 @@
 use crate::{
     blockfrost::BlockfrostClient,
     error::AgentError,
-    main::AgentConfig,
     supabase::SupabaseWriter,
 };
 use bearings_shared::models::OperationalLedger;
+use crate::AgentConfig;
 use chrono::{TimeZone, Utc};
 
 /// Check both wallets for new inbound transactions.
@@ -56,8 +56,8 @@ pub async fn check_inbound(
 
             let entry = OperationalLedger {
                 id: 0, // Set by database
-                tx_date: Some(tx_time),
-                direction: Some("in".to_string()),
+                tx_date: Some(tx_time.date_naive()),
+                direction: "in".to_string(),
                 amount_ada: Some(net_ada),
                 amount_usd: None,
                 vendor: Some("Community donation".to_string()),
@@ -68,6 +68,7 @@ pub async fn check_inbound(
                 )),
                 tx_hash: Some(tx.tx_hash.clone()),
                 authorized_by: Some("cardano_network".to_string()),
+                ..Default::default()
             };
 
             db.insert_ledger_entry(&entry).await?;

@@ -385,7 +385,7 @@ impl GovernanceTokenHolder {
 
     /// Resolved display name — falls back to "Anonymous Contributor"
     pub fn resolved_name(&self) -> &str {
-        self.display_name.as_deref().unwrap_or("Anonymous Contributor")
+        self.display_name.as_str()
     }
 }
 

@@ -163,8 +163,10 @@ async fn is_duplicate(
 ) -> Result<bool, AppError> {
     // PostgREST ilike uses * wildcard, value must be URL-encoded
     // Pattern: *name* for substring match
-    let name_pattern = urlencoding::encode(&format!("*{}*", name));
-    let city_encoded = urlencoding::encode(city);
+    let name_fmt = format!("*{}*", name);
+    let name_pattern = urlencoding::encode(&name_fmt);
+    let city_str = city.to_string();
+    let city_encoded = urlencoding::encode(&city_str);
 
     // Check events
     let url = format!(

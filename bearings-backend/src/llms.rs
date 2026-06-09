@@ -70,19 +70,15 @@ pub async fn llms_full_txt(
     State(db): State<SupabaseClient>,
 ) -> Result<Response, AppError> {
     // Fetch from all ai_* views concurrently
+    let url_events    = format!("{}/rest/v1/ai_event_summary?select=*&limit=50", db.url);
+    let url_places    = format!("{}/rest/v1/ai_place_summary?select=*&limit=50", db.url);
+    let url_titles    = format!("{}/rest/v1/ai_title_summary?select=*", db.url);
+    let url_campaigns = format!("{}/rest/v1/ai_campaign_summary?select=*", db.url);
     let (events, places, titles, campaigns) = tokio::try_join!(
-        db.get_json::<Vec<serde_json::Value>>(
-            &format!("{}/rest/v1/ai_event_summary?select=*&limit=50", db.url)
-        ),
-        db.get_json::<Vec<serde_json::Value>>(
-            &format!("{}/rest/v1/ai_place_summary?select=*&limit=50", db.url)
-        ),
-        db.get_json::<Vec<serde_json::Value>>(
-            &format!("{}/rest/v1/ai_title_summary?select=*", db.url)
-        ),
-        db.get_json::<Vec<serde_json::Value>>(
-            &format!("{}/rest/v1/ai_campaign_summary?select=*", db.url)
-        ),
+        db.get_json::<Vec<serde_json::Value>>(&url_events),
+        db.get_json::<Vec<serde_json::Value>>(&url_places),
+        db.get_json::<Vec<serde_json::Value>>(&url_titles),
+        db.get_json::<Vec<serde_json::Value>>(&url_campaigns),
     )?;
 
     // Format events
