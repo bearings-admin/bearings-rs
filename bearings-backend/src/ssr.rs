@@ -822,65 +822,30 @@ async fn zone_archive(db: SupabaseClient, decade: Option<String>, fragment: Opti
          &order=year.asc&limit=100",
         db.url
     );
-    let history: Vec<serde_json::Value> = match db.get_json(&url).await {
+    let titles_url = format!(
+        "{}/rest/v1/title_holders?select=title_name,holder_name,year,city,country\
+         &order=year.desc&limit=200",
+        db.url
+    );
+    let stories_url = format!(
+        "{}/rest/v1/stories?active=eq.true\
+         &select=title,story_type,year,excerpt\
+         &order=year.desc&limit=100",
+        db.url
+    );
+
+    let (history_res, titles_res, stories_res) = tokio::join!(
+        db.get_json::<Vec<serde_json::Value>>(&url),
+        db.get_json::<Vec<serde_json::Value>>(&titles_url),
+        db.get_json::<Vec<serde_json::Value>>(&stories_url),
+    );
+
+    let history = match history_res {
         Ok(h) => h,
         Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
     };
-
-    let titles_url = format!(
-        "{}/rest/v1/title_holders?select=title_name,holder_name,year,city,country\
-         &order=year.desc&limit=12",
-        db.url
-    );
-    let recent_titles: Vec<serde_json::Value> = db.get_json(&titles_url).await.unwrap_or_default();
-
-    let stories_url = format!(
-        "{}/rest/v1/stories?active=eq.true         &select=title,story_type,year,excerpt         &order=year.desc&limit=20",
-        db.url
-    );
-    let stories: Vec<serde_json::Value> = db.get_json(&stories_url).await.unwrap_or_default();
-
-    let story_cards: String = stories.iter().map(|st| {
-        let stitle   = st["title"].as_str().unwrap_or("");
-        let stype    = st["story_type"].as_str().unwrap_or("story");
-        let syear    = st["year"].as_i64().unwrap_or(0);
-        let sexcerpt = st["excerpt"].as_str().unwrap_or("");
-        let type_label = match stype {
-            "interview"              => "Interview",
-            "first-person"           => "First Person",
-            "scholarship"            => "Scholarship",
-            "institutional-history"  => "History",
-            "oral_history"           => "Oral History",
-            _                        => stype,
-        };
-        card(&format!(
-            "<div>\
-              <div style=\"display:flex;justify-content:space-between;\
-                          align-items:flex-start\">\
-                <div style=\"font-weight:600;font-size:14px;flex:1;\
-                            padding-right:8px\">{stitle}</div>\
-                <div style=\"font-size:20px;font-weight:700;\
-                            color:{ORANGE};flex-shrink:0\">{syear}</div>\
-              </div>\
-              <div style=\"margin:3px 0 6px\">\
-                <span style=\"font-size:10px;font-weight:600;\
-                             text-transform:uppercase;letter-spacing:.08em;\
-                             color:{BROWN};background:{OFF_WHITE};\
-                             border:1px solid {TAN};border-radius:12px;\
-                             padding:2px 8px\">{type_label}</span>\
-              </div>\
-              {excerpt_h}\
-            </div>",
-            excerpt_h = if !sexcerpt.is_empty() {
-                format!(
-                    "<div style=\"font-size:12px;color:{MID};\
-                                 line-height:1.6;font-style:italic\">\
-                      &ldquo;{}&rdquo;</div>",
-                    sexcerpt.chars().take(280).collect::<String>()
-                )
-            } else { String::new() },
-        ))
-    }).collect();
+    let all_titles  = titles_res.unwrap_or_default();
+    let all_stories = stories_res.unwrap_or_default();
 
     let decades = ["1980s","1990s","2000s","2010s","2020s"];
     let active  = decade.as_deref().unwrap_or("2020s");
@@ -888,7 +853,31 @@ async fn zone_archive(db: SupabaseClient, decade: Option<String>, fragment: Opti
         "1980s" => 1980, "1990s" => 1990, "2000s" => 2000, "2010s" => 2010, _ => 2020,
     };
 
-    // Decade tabs — each shows count of entries
+    let decade_context: &str = match active {
+        "1980s" => "The bear community emerged from leather bars in San Francisco and New York as a deliberate \
+                    counter to mainstream gay culture's body standards. The AIDS crisis both devastated and \
+                    galvanised — fundraising events, mutual aid networks, and the early bear clubs became \
+                    community lifelines. The International Bear Rendezvous held its first gathering in 1987.",
+        "1990s" => "IBR peaked with 5,000+ attendees. Regional bear runs spread across North America and into \
+                    Europe. The community debated its own boundaries — who counted as a bear, whether leather \
+                    and bear culture were separating, and how to document an oral tradition before it was lost. \
+                    The first bear title competitions formalised community leadership.",
+        "2000s" => "The internet reshaped everything. Online communities let isolated bears connect without \
+                    geography. Bear-specific social platforms launched and merged. Pride events globally began \
+                    programming dedicated bear spaces. Title competitions expanded to national and continental \
+                    levels, and European clubs found their own voice distinct from the North American model.",
+        "2010s" => "Social media brought visibility and new friction — global audiences, broader inclusion \
+                    debates, and algorithmic culture clash with community-organised space. Bear Run attendance \
+                    diversified in body type, kink background, and nationality. Scholarship and oral history \
+                    projects launched to archive first-generation memories. COVID cast a shadow at decade's end.",
+        _       => "The pandemic years forced a pivot to virtual events, then a hungry return to in-person \
+                    gatherings. Inclusion of trans and non-binary community members became an explicit priority. \
+                    New title competitions launched in Latin America, Africa, and Southeast Asia. Digital \
+                    infrastructure — iCal feeds, community directories, and shared databases — became \
+                    maintenance priorities as founding-generation stewards aged.",
+    };
+
+    // Decade tabs with milestone counts
     let tabs: String = decades.iter().map(|&d| {
         let on = d == active;
         let ds: i64 = match d { "1980s"=>1980,"1990s"=>1990,"2000s"=>2000,"2010s"=>2010,_=>2020 };
@@ -905,20 +894,28 @@ async fn zone_archive(db: SupabaseClient, decade: Option<String>, fragment: Opti
         )
     }).collect::<Vec<_>>().join("");
 
+    // Filter everything to active decade
     let decade_entries: Vec<&serde_json::Value> = history.iter()
         .filter(|h| h["year"].as_i64()
             .map(|y| y >= d_start && y < d_start + 10)
             .unwrap_or(false))
         .collect();
 
+    let decade_titles: Vec<&serde_json::Value> = all_titles.iter()
+        .filter(|t| t["year"].as_i64()
+            .map(|y| y >= d_start && y < d_start + 10)
+            .unwrap_or(false))
+        .collect();
+
+    let decade_stories: Vec<&serde_json::Value> = all_stories.iter()
+        .filter(|st| st["year"].as_i64()
+            .map(|y| y >= d_start && y < d_start + 10)
+            .unwrap_or(false))
+        .collect();
+
     let timeline = build_timeline(&decade_entries);
 
-    // Return only timeline fragment for HTMX decade tab swaps
-    if fragment.as_deref() == Some("tl") {
-        return Html(format!("<div id=\"archive-tl\">{}</div>", timeline)).into_response();
-    }
-
-    let title_cards: String = recent_titles.iter().take(8).map(|t| {
+    let title_cards: String = decade_titles.iter().map(|t| {
         let title  = t["title_name"].as_str().unwrap_or("");
         let holder = t["holder_name"].as_str().unwrap_or("");
         let year   = t["year"].as_i64().unwrap_or(0);
@@ -937,6 +934,82 @@ async fn zone_archive(db: SupabaseClient, decade: Option<String>, fragment: Opti
         ))
     }).collect();
 
+    let story_cards: String = decade_stories.iter().map(|st| {
+        let stitle   = st["title"].as_str().unwrap_or("");
+        let stype    = st["story_type"].as_str().unwrap_or("story");
+        let syear    = st["year"].as_i64().unwrap_or(0);
+        let sexcerpt = st["excerpt"].as_str().unwrap_or("");
+        let type_label = match stype {
+            "interview"              => "Interview",
+            "first-person"           => "First Person",
+            "scholarship"            => "Scholarship",
+            "institutional-history"  => "History",
+            "oral_history"           => "Oral History",
+            _                        => stype,
+        };
+        card(&format!(
+            "<div>\
+              <div style=\"display:flex;justify-content:space-between;align-items:flex-start\">\
+                <div style=\"font-weight:600;font-size:14px;flex:1;padding-right:8px\">{stitle}</div>\
+                <div style=\"font-size:20px;font-weight:700;color:{ORANGE};flex-shrink:0\">{syear}</div>\
+              </div>\
+              <div style=\"margin:3px 0 6px\">\
+                <span style=\"font-size:10px;font-weight:600;text-transform:uppercase;\
+                             letter-spacing:.08em;color:{BROWN};background:{OFF_WHITE};\
+                             border:1px solid {TAN};border-radius:12px;\
+                             padding:2px 8px\">{type_label}</span>\
+              </div>\
+              {excerpt_h}\
+            </div>",
+            excerpt_h = if !sexcerpt.is_empty() {
+                format!(
+                    "<div style=\"font-size:12px;color:{MID};line-height:1.6;font-style:italic\">\
+                      &ldquo;{}&rdquo;</div>",
+                    sexcerpt.chars().take(280).collect::<String>()
+                )
+            } else { String::new() },
+        ))
+    }).collect();
+
+    let titles_section = if decade_titles.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "{}{}\
+             <a href=\"/?zone=titles\" style=\"display:block;text-align:center;font-size:13px;\
+                color:{ORANGE};padding:4px 0 12px\">Full title archive →</a>",
+            sh("Title Holders of the Era", Some(decade_titles.len())),
+            title_cards,
+        )
+    };
+
+    let stories_section = if decade_stories.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "{}{}",
+            sh("Voices — Oral Histories &amp; Scholarship", Some(decade_stories.len())),
+            story_cards,
+        )
+    };
+
+    let tl_inner = format!(
+        "<div style=\"background:{OFF_WHITE};border-left:4px solid {ORANGE};\
+                     padding:12px 14px;border-radius:0 6px 6px 0;\
+                     font-size:13px;color:{MID};line-height:1.7;\
+                     margin-bottom:16px\">{decade_context}</div>\
+         {sh_milestones}\
+         {timeline}\
+         {titles_section}\
+         {stories_section}",
+        sh_milestones = sh(&format!("{active} Milestones"), Some(decade_entries.len())),
+    );
+
+    // Return only the tl fragment for HTMX decade tab swaps
+    if fragment.as_deref() == Some("tl") {
+        return Html(format!("<div id=\"archive-tl\">{tl_inner}</div>")).into_response();
+    }
+
     let page_archive_title = i18n::t(i18n::translations(), lang, "page.history.title");
     let body = format!(
         "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">{page_archive_title}</h1>\
@@ -944,22 +1017,13 @@ async fn zone_archive(db: SupabaseClient, decade: Option<String>, fragment: Opti
           Community history from 1987 to present — {n} milestones documented.</p>\
         <div style=\"display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px\">{tabs}</div>\
         <div id=\"archive-spin\" class=\"htmx-indicator\">Loading…</div>\
-        <div id=\"archive-tl\">{timeline}</div>\
-        {h_titles}\
-        {title_cards}\
-        <a href=\"/?zone=titles\" style=\"display:block;text-align:center;font-size:13px;\
-           color:{ORANGE};padding:8px 0 16px\">Full title archive (87 records) →</a>\
-        {h_voices}\
-        {story_cards}\
+        <div id=\"archive-tl\">{tl_inner}</div>\
         <div class=\"card\">\
           <div style=\"font-weight:600;font-size:14px;margin-bottom:4px\">Clubs &amp; Organisations</div>\
           <div style=\"font-size:12px;color:{MID};margin-bottom:6px\">49 clubs across 20+ countries.</div>\
           <a href=\"/?zone=clubs\" style=\"font-size:12px;color:{ORANGE}\">View all clubs →</a>\
         </div>",
-        n          = history.len(),
-        h_titles   = sh("Recent Title Holders", None),
-        h_voices   = sh("Voices — Oral Histories &amp; Scholarship", Some(stories.len())),
-        story_cards = story_cards,
+        n = history.len(),
     );
     Html(shell("Bear Archives", "Community history 1987 to present.", "archive", &body, lang)).into_response()
 }
@@ -1819,7 +1883,7 @@ async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
             }).collect();
 
             let more_note = if comp_holders.len() > 12 {
-                format!("<div style=\"font-size:11px;color:{MID};padding:4px 0\">+ {} more holders in archive</div>",
+                format!("<div style=\"font-size:11px;color:{MID};padding:4px 0\">+ <a href=\'/?zone=archive\' style=\'color:{ORANGE}\'>{} more in archive →</a></div>",
                     comp_holders.len() - 12)
             } else { String::new() };
 
