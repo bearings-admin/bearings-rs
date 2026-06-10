@@ -86,18 +86,20 @@ fn shell(title: &str, description: &str, active: &str, body: &str, lang: &str) -
         )
     }).collect();
 
-    // Bottom nav — 4 temporal zones
-    let tnav = |zone: &str, icon: &str, key: &str| {
-        let on    = zone == active;
-        let label = tl(key);
+    // Bottom nav — 4 temporal zones, inline SVG icons
+    let tnav_svg = |zone: &str, label: &str, svg: &str| {
+        let on  = zone == active;
+        let col = if on { ORANGE } else { BROWN };
+        let fw  = if on { "700" } else { "400" };
         format!(
             "<a href=\"/?zone={zone}&lang={lang}\" \
                style=\"display:flex;flex-direction:column;align-items:center;\
-                       gap:2px;text-decoration:none;padding:5px 10px;\
-                       border-radius:10px;color:{col};font-weight:{fw};font-size:10px\"\
-               ><span style=\"font-size:20px;line-height:1\">{icon}</span>{label}</a>",
-            col = if on { ORANGE } else { BROWN },
-            fw  = if on { "700" } else { "400" },
+                       gap:3px;text-decoration:none;padding:5px 10px;\
+                       border-radius:10px;color:{col};font-weight:{fw};font-size:10px;\
+                       letter-spacing:.03em\">\
+              <span style=\"display:flex;align-items:center;justify-content:center;height:22px;width:22px\">{svg}</span>\
+              {label}\
+            </a>"
         )
     };
 
@@ -256,10 +258,10 @@ padding:5px 8px 10px\">\n\
 \n\
 </body>\n\
 </html>",
-        n_archive  = tnav("archive",    "📚", "nav.archive"),
-        n_now      = tnav("now",        "🌎", "nav.events"),
-        n_upcoming = tnav("coming-up",  "📍", "nav.timeline"),
-        n_future   = tnav("future",     "🔭", "nav.history"),
+        n_archive  = tnav_svg("archive",   "Archive",  "<svg width=\'22\' height=\'22\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><circle cx=\'12\' cy=\'12\' r=\'9\'/><polyline points=\'12 7 12 12 9 15\'/></svg>"),
+        n_now      = tnav_svg("now",        "Now",      "<svg width=\'22\' height=\'22\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><path d=\'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z\'/><circle cx=\'12\' cy=\'9\' r=\'2.5\'/></svg>"),
+        n_upcoming = tnav_svg("coming-up",  "Upcoming", "<svg width=\'22\' height=\'22\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><rect x=\'3\' y=\'4\' width=\'18\' height=\'18\' rx=\'2\'/><line x1=\'16\' y1=\'2\' x2=\'16\' y2=\'6\'/><line x1=\'8\' y1=\'2\' x2=\'8\' y2=\'6\'/><line x1=\'3\' y1=\'10\' x2=\'21\' y2=\'10\'/><line x1=\'8\' y1=\'15\' x2=\'10\' y2=\'15\'/><line x1=\'12\' y1=\'15\' x2=\'16\' y2=\'15\'/></svg>"),
+        n_future   = tnav_svg("future",     "Future",   "<svg width=\'22\' height=\'22\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><circle cx=\'12\' cy=\'12\' r=\'9\'/><line x1=\'12\' y1=\'8\' x2=\'12\' y2=\'12\'/><line x1=\'12\' y1=\'12\' x2=\'15\' y2=\'14\'/><circle cx=\'12\' cy=\'12\' r=\'1.5\' fill=\'currentColor\'/></svg>"),
     )
 }
 fn card(c: &str) -> String {
@@ -1360,9 +1362,19 @@ async fn zone_future(db: SupabaseClient, lang: &str) -> Response {
 async fn zone_places(db: SupabaseClient, filter_type: Option<String>, filter_country: Option<String>, lang: &str) -> Response {
     let ft = filter_type.as_deref().unwrap_or("");
     let fc = filter_country.as_deref().unwrap_or("");
-    let tc = if !ft.is_empty() { format!("&place_type=eq.{ft}") } else { String::new() };
+
+    // Fetch ALL places for country (for tab counts) — no type filter
     let cc = if !fc.is_empty() { format!("&country=eq.{fc}") } else { String::new() };
-    let url = format!(
+    let url_all = format!(
+        "{}/rest/v1/places?active=eq.true\
+         &select=place_type,country\
+         {cc}\
+         &limit=500",
+        db.url
+    );
+    // Fetch filtered places for display
+    let tc = if !ft.is_empty() { format!("&place_type=eq.{ft}") } else { String::new() };
+    let url_filtered = format!(
         "{}/rest/v1/places?active=eq.true\
          &select=name,place_type,city,country,address,hours_open,website,\
          booking_link,bear_popular,bear_night_schedule,inclusion_flag_codes\
@@ -1370,24 +1382,66 @@ async fn zone_places(db: SupabaseClient, filter_type: Option<String>, filter_cou
          &order=bear_popular.desc.nullslast,country.asc,city.asc&limit=200",
         db.url
     );
-    let places: Vec<serde_json::Value> = db.get_json(&url).await.unwrap_or_default();
+    let (all_res, filtered_res) = tokio::join!(
+        db.get_json::<Vec<serde_json::Value>>(&url_all),
+        db.get_json::<Vec<serde_json::Value>>(&url_filtered),
+    );
+    let all_places      = all_res.unwrap_or_default();
+    let places          = filtered_res.unwrap_or_default();
 
-    let mut countries: Vec<String> = places.iter()
+    // Count per type across all (country-filtered) places
+    let mut type_counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for p in &all_places {
+        let pt = p["place_type"].as_str().unwrap_or("other");
+        *type_counts.entry(pt).or_insert(0) += 1;
+    }
+    let total_all = all_places.len();
+
+    // Unique countries from ALL places
+    let mut countries: Vec<String> = all_places.iter()
         .filter_map(|p| p["country"].as_str().map(String::from))
         .collect::<std::collections::HashSet<_>>().into_iter().collect();
     countries.sort();
 
-    let type_opts: &[(&str, &str)] = &[
-        ("", "All types"), ("bar", "Bar"), ("leather-bar", "Leather Bar"),
-        ("sauna-bathhouse", "Sauna / Bathhouse"), ("campground", "Campground"),
-        ("party-venue", "Party Venue"), ("resort", "Resort"),
-        ("hotel", "Hotel"), ("cruise-ship", "Cruise Ship"),
+    // Tab definitions — (slug, label, icon)
+    let type_tabs: &[(&str, &str, &str)] = &[
+        ("",                "All",      "🗺"),
+        ("bar",             "Bar",      "🍺"),
+        ("leather-bar",     "Leather",  "🧤"),
+        ("sauna-bathhouse", "Sauna",    "♨"),
+        ("campground",      "Camp",     "🏕"),
+        ("party-venue",     "Party",    "🎉"),
+        ("resort",          "Resort",   "🛖"),
+        ("hotel",           "Hotel",    "🏨"),
+        ("cruise-ship",     "Cruise",   "🚢"),
     ];
-    let type_sel: String = type_opts.iter().map(|(v, l)| {
-        let sel = if *v == ft { " selected" } else { "" };
-        format!("<option value=\"{v}\"{sel}>{l}</option>")
+
+    let tabs_html: String = type_tabs.iter().filter_map(|(slug, label, icon)| {
+        let count = if slug.is_empty() { total_all } else { *type_counts.get(*slug).unwrap_or(&0) };
+        if count == 0 && !slug.is_empty() { return None; }  // hide empty tabs
+        let on     = *slug == ft;
+        let bg     = if on { ORANGE } else { OFF_WHITE };
+        let fg     = if on { "#fff" }  else { BROWN };
+        let border = if on { ORANGE }  else { TAN };
+        let fw     = if on { "700" }   else { "400" };
+        let country_qs = if !fc.is_empty() { format!("&place_country={fc}") } else { String::new() };
+        Some(format!(
+            "<a href=\"/?zone=places&place_type={slug}&lang={lang}{cqs}\" \
+               style=\"display:inline-flex;flex-direction:column;align-items:center;\
+                       gap:1px;text-decoration:none;padding:7px 10px;\
+                       border-radius:12px;border:1px solid {border};\
+                       background:{bg};color:{fg};font-weight:{fw};\
+                       white-space:nowrap;min-width:52px\">\
+              <span style=\"font-size:14px;line-height:1\">{icon}</span>\
+              <span style=\"font-size:10px\">{label}</span>\
+              <span style=\"font-size:9px;opacity:.8\">{count}</span>\
+            </a>",
+            cqs = country_qs,
+        ))
     }).collect();
-    let ctry_opts: Vec<(String, String)> = std::iter::once(("".to_string(), "All countries".to_string()))
+
+    // Country dropdown
+    let ctry_opts: Vec<(String, String)> = std::iter::once(("".to_string(), "🌍 All regions".to_string()))
         .chain(countries.iter().map(|c| (c.clone(), c.clone())))
         .collect();
     let ctry_sel: String = ctry_opts.iter().map(|(v, l)| {
@@ -1395,74 +1449,113 @@ async fn zone_places(db: SupabaseClient, filter_type: Option<String>, filter_cou
         format!("<option value=\"{v}\"{sel}>{l}</option>")
     }).collect();
     let sel_style = format!(
-        "font-size:12px;padding:6px 10px;border-radius:20px;\
-         border:1px solid {TAN};background:{OFF_WHITE};color:{DARK}"
+        "font-size:12px;padding:6px 12px;border-radius:20px;\
+         border:1px solid {TAN};background:{OFF_WHITE};color:{DARK};\
+         font-family:inherit"
     );
-    let filter_bar = format!(
-        "<form method=\"get\" action=\"/\" \
-               style=\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px\">\
+
+    // Place type label for the active filter
+    let type_label = type_tabs.iter()
+        .find(|(s, _, _)| *s == ft)
+        .map(|(_, l, _)| *l)
+        .unwrap_or("All");
+    let region_label = if fc.is_empty() { "worldwide".to_string() } else { fc.to_string() };
+
+    // Group places by type for display when "All" is selected, else flat list
+    let items_html: String = if ft.is_empty() {
+        // Grouped by type
+        type_tabs.iter().filter_map(|(slug, label, icon)| {
+            if slug.is_empty() { return None; }
+            let group: Vec<&serde_json::Value> = places.iter()
+                .filter(|p| p["place_type"].as_str().unwrap_or("") == *slug)
+                .collect();
+            if group.is_empty() { return None; }
+            let cards: String = group.iter().map(|p| place_card(p)).collect();
+            Some(format!(
+                "<div style=\"font-size:10px;font-weight:700;text-transform:uppercase;\
+                  letter-spacing:.1em;color:{MID};margin:16px 0 6px\">{icon} {label} <span style=\"font-weight:400\">({n})</span></div>{cards}",
+                n = group.len(),
+            ))
+        }).collect()
+    } else {
+        places.iter().map(|p| place_card(p)).collect()
+    };
+
+    let body = format!(
+        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:8px\">\
+          Bear Venues <span style=\"font-size:13px;font-weight:400;color:{MID}\">{type_label} · {region_label}</span></h1>\
+        \
+        <div style=\"overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:10px\">\
+          <div style=\"display:inline-flex;gap:6px;padding-bottom:4px;min-width:min-content\">\
+            {tabs_html}\
+          </div>\
+        </div>\
+        \
+        <form method=\"get\" action=\"/\" style=\"margin-bottom:12px;display:flex;align-items:center;gap:8px\">\
           <input type=\"hidden\" name=\"zone\" value=\"places\">\
           <input type=\"hidden\" name=\"lang\" value=\"{lang}\">\
-          <select name=\"place_type\" onchange=\"this.form.submit()\" style=\"{sel_style}\">\
-            {type_sel}</select>\
+          {type_hidden}\
           <select name=\"place_country\" onchange=\"this.form.submit()\" style=\"{sel_style}\">\
             {ctry_sel}</select>\
-          <span style=\"font-size:11px;color:{MID};align-self:center\">{n} venues</span>\
-        </form>",
+          <span style=\"font-size:11px;color:{MID};white-space:nowrap\">{n} venues</span>\
+        </form>\
+        \
+        {items_html}",
+        type_hidden = if !ft.is_empty() {
+            format!("<input type=\"hidden\" name=\"place_type\" value=\"{ft}\">")
+        } else { String::new() },
         n = places.len(),
     );
-    let items: String = places.iter().map(|p| {
-        let name  = p["name"].as_str().unwrap_or("");
-        let ptype = p["place_type"].as_str().unwrap_or("");
-        let city  = p["city"].as_str().unwrap_or("");
-        let ctry  = p["country"].as_str().unwrap_or("");
-        let addr  = p["address"].as_str().unwrap_or("");
-        let hours = p["hours_open"].as_str().unwrap_or("");
-        let site  = p["website"].as_str().unwrap_or("");
-        let book  = p["booking_link"].as_str().unwrap_or("");
-        let bn    = p["bear_night_schedule"].as_str().unwrap_or("");
-        let pop   = p["bear_popular"].as_bool().unwrap_or(false);
-        let fs: Vec<String> = p["inclusion_flag_codes"].as_array()
-            .map(|v| v.iter().filter_map(|s| s.as_str().map(String::from)).collect())
-            .unwrap_or_default();
-        let site_html = if !site.is_empty() && site != "#" {
-            format!("<a href=\"{site}\" target=\"_blank\" rel=\"noopener\" class=\"btn-t\">Site</a>")
-        } else { String::new() };
-        let book_html = if !book.is_empty() && book != "#" {
-            format!("<a href=\"{book}\" target=\"_blank\" rel=\"noopener\" class=\"btn-o\">Book</a>")
-        } else { String::new() };
-        card(&format!(
-            "<div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:10px\">\
-              <div style=\"flex:1;min-width:0\">\
-                <div style=\"font-weight:600;font-size:14px\">{name}{pop_icon}\
-                  <span style=\"font-weight:400;font-size:11px;color:{MID}\"> {ptype}</span>\
-                </div>\
-                <div style=\"font-size:12px;color:{MID}\">{city}, {ctry}</div>\
-                {addr_h}{hours_h}{bn_h}\
-                <div style=\"margin-top:4px\">{fhtml}</div>\
-              </div>\
-              <div style=\"display:flex;flex-direction:column;gap:6px\">{site_html}{book_html}</div>\
-            </div>",
-            pop_icon = if pop { " 🐻" } else { "" },
-            addr_h   = if !addr.is_empty() {
-                format!("<div style=\"font-size:11px;color:{MID}\">{addr}</div>")
-            } else { String::new() },
-            hours_h  = if !hours.is_empty() {
-                format!("<div style=\"font-size:11px;color:{GOLD}\">🕐 {}</div>",
-                    hours.chars().take(60).collect::<String>())
-            } else { String::new() },
-            bn_h     = if !bn.is_empty() {
-                format!("<div style=\"font-size:11px;color:{ORANGE}\">🐻 {}</div>",
-                    bn.chars().take(80).collect::<String>())
-            } else { String::new() },
-            fhtml    = flags(&fs),
-        ))
-    }).collect();
-    let page_places_title = i18n::t(i18n::translations(), lang, "page.places.title");
-    let body = format!(
-        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:8px\">Bear Venues</h1>{filter_bar}{items}"
-    );
     Html(shell("Places", "Bear bars, saunas, campgrounds worldwide.", "places", &body, lang)).into_response()
+}
+
+fn place_card(p: &serde_json::Value) -> String {
+    let name  = p["name"].as_str().unwrap_or("");
+    let ptype = p["place_type"].as_str().unwrap_or("");
+    let city  = p["city"].as_str().unwrap_or("");
+    let ctry  = p["country"].as_str().unwrap_or("");
+    let addr  = p["address"].as_str().unwrap_or("");
+    let hours = p["hours_open"].as_str().unwrap_or("");
+    let site  = p["website"].as_str().unwrap_or("");
+    let book  = p["booking_link"].as_str().unwrap_or("");
+    let bn    = p["bear_night_schedule"].as_str().unwrap_or("");
+    let pop   = p["bear_popular"].as_bool().unwrap_or(false);
+    let fs: Vec<String> = p["inclusion_flag_codes"].as_array()
+        .map(|v| v.iter().filter_map(|s| s.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+    let site_html = if !site.is_empty() && site != "#" {
+        format!("<a href=\"{site}\" target=\"_blank\" rel=\"noopener\" class=\"btn-t\">Site</a>")
+    } else { String::new() };
+    let book_html = if !book.is_empty() && book != "#" {
+        format!("<a href=\"{book}\" target=\"_blank\" rel=\"noopener\" class=\"btn-o\">Book</a>")
+    } else { String::new() };
+    card(&format!(
+        "<div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:10px\">\
+          <div style=\"flex:1;min-width:0\">\
+            <div style=\"font-weight:600;font-size:14px\">{name}{pop_icon}\
+              <span style=\"font-weight:400;font-size:11px;color:{MID}\"> {ptype}</span>\
+            </div>\
+            <div style=\"font-size:12px;color:{MID}\">{city}{sep}{ctry}</div>\
+            {addr_h}{hours_h}{bn_h}\
+            <div style=\"margin-top:4px\">{fhtml}</div>\
+          </div>\
+          <div style=\"display:flex;flex-direction:column;gap:6px\">{site_html}{book_html}</div>\
+        </div>",
+        sep      = if !city.is_empty() && !ctry.is_empty() { ", " } else { "" },
+        pop_icon = if pop { " 🐻" } else { "" },
+        addr_h   = if !addr.is_empty() {
+            format!("<div style=\"font-size:11px;color:{MID}\">{addr}</div>")
+        } else { String::new() },
+        hours_h  = if !hours.is_empty() {
+            format!("<div style=\"font-size:11px;color:{GOLD}\">🕐 {}</div>",
+                hours.chars().take(60).collect::<String>())
+        } else { String::new() },
+        bn_h     = if !bn.is_empty() {
+            format!("<div style=\"font-size:11px;color:{ORANGE}\">🐻 {}</div>",
+                bn.chars().take(80).collect::<String>())
+        } else { String::new() },
+        fhtml    = flags(&fs),
+    ))
 }
 
 async fn zone_events(db: SupabaseClient, month: Option<u32>, lang: &str) -> Response {
