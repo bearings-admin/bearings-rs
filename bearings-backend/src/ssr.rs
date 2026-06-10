@@ -36,6 +36,7 @@ use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Response},
 };
+use chrono::{Utc, Months};
 use crate::db::SupabaseClient;
 use crate::i18n;
 use serde::Deserialize;
@@ -50,7 +51,9 @@ pub struct ZoneQuery {
     pub fragment:     Option<String>,  // "events" → return bare #event-list HTML for HTMX
     pub place_type:    Option<String>,
     pub place_country: Option<String>,
-    pub lang:         Option<String>,
+    pub lang:          Option<String>,
+    pub months_ahead:  Option<u32>,
+    pub event_country: Option<String>,
 }
 
 // ── Design system (Variant G) ─────────────────────────────────
@@ -69,37 +72,61 @@ fn shell(title: &str, description: &str, active: &str, body: &str, lang: &str) -
     let i18n = i18n::translations();
     let tl = |key: &str| i18n::t(i18n, lang, key);
 
-    // Language switcher: links preserve zone, swap lang param
-    let lang_switcher = {
-        let langs = [("en", "EN"), ("es", "ES"), ("fr", "FR")];
-        langs.iter().map(|(code, label)| {
-            let active_style = if *code == lang {
-                format!("background:{BROWN};color:#fff")
-            } else {
-                format!("background:transparent;color:{MID}")
-            };
-            format!(
-                "<a href=\"/?zone={active}&lang={code}\" \
-                   style=\"font-size:10px;font-weight:700;padding:3px 7px;\
-                           border-radius:999px;text-decoration:none;{active_style}\">{label}</a>",
-            )
-        }).collect::<Vec<_>>().join("")
-    };
+    // Language switcher
+    let lang_switcher: String = [("en","EN"),("es","ES"),("fr","FR")].iter().map(|(code, label)| {
+        let active_style = if *code == lang {
+            format!("background:{BROWN};color:#fff")
+        } else {
+            format!("background:transparent;color:{MID}")
+        };
+        format!(
+            "<a href=\"/?zone={active}&lang={code}\" \
+               style=\"font-size:10px;font-weight:700;padding:3px 7px;\
+                       border-radius:999px;text-decoration:none;{active_style}\">{label}</a>"
+        )
+    }).collect();
 
-    let nav = |zone: &str, icon: &str, key: &str| {
+    // Bottom nav — 4 temporal zones
+    let tnav = |zone: &str, icon: &str, key: &str| {
         let on    = zone == active;
         let label = tl(key);
         format!(
             "<a href=\"/?zone={zone}&lang={lang}\" \
-               style=\"display:flex;flex-direction:column;\
-               align-items:center;gap:2px;text-decoration:none;padding:4px 8px;\
-               border-radius:10px;color:{col};font-weight:{fw};font-size:10px\"\
+               style=\"display:flex;flex-direction:column;align-items:center;\
+                       gap:2px;text-decoration:none;padding:5px 10px;\
+                       border-radius:10px;color:{col};font-weight:{fw};font-size:10px\"\
                ><span style=\"font-size:20px;line-height:1\">{icon}</span>{label}</a>",
             col = if on { ORANGE } else { BROWN },
             fw  = if on { "700" } else { "400" },
         )
     };
-    let _ = tl; // suppress unused warning if no keys used in body
+
+    // Directory menu items (hamburger)
+    let dir_items: &[(&str, &str, &str)] = &[
+        ("places",        "🍺", "nav.places"),
+        ("clubs",         "🏳\u{fe0f}", "nav.clubs"),
+        ("creators",      "🎨", "nav.creators"),
+        ("titles",        "🏆", "nav.titles"),
+        ("campaigns",     "💚", "nav.campaigns"),
+        ("digital-spaces","📱", "nav.digital"),
+    ];
+    let dir_links: String = dir_items.iter().map(|(zone, icon, key)| {
+        let on = zone == &active;
+        format!(
+            "<a href=\"/?zone={zone}&lang={lang}\" \
+               style=\"display:flex;align-items:center;gap:10px;\
+                       padding:10px 0;border-bottom:1px solid {TAN};\
+                       text-decoration:none;color:{col};font-weight:{fw}\">\
+              <span style=\"font-size:18px\">{icon}</span>\
+              <span style=\"font-size:14px\">{label}</span>\
+            </a>",
+            col   = if on { ORANGE } else { DARK },
+            fw    = if on { "700" } else { "400" },
+            label = tl(key),
+        )
+    }).collect();
+
+    let _ = tl;
     format!(
         "<!DOCTYPE html>\n\
 <html lang=\"{lang}\">\n\
@@ -110,7 +137,6 @@ fn shell(title: &str, description: &str, active: &str, body: &str, lang: &str) -
   <meta name=\"description\" content=\"{description}\">\n\
   <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n\
   <link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap\">\n\
-  <script src=\"https://cdn.tailwindcss.com\"></script>\n\
   <script src=\"https://unpkg.com/htmx.org@1.9.12\"></script>\n\
   <style>\n\
     *{{box-sizing:border-box;margin:0;padding:0}}\n\
@@ -156,27 +182,61 @@ fn shell(title: &str, description: &str, active: &str, body: &str, lang: &str) -
     .cat{{font-size:9px;font-weight:700;padding:2px 7px;border-radius:999px;\n\
           text-transform:uppercase;letter-spacing:.05em;display:inline-block;\n\
           margin-bottom:6px}}\n\
+    /* Hamburger drawer */\n\
+    .drawer-chk{{display:none}}\n\
+    .drawer-backdrop{{display:none;position:fixed;inset:0;\n\
+                      background:rgba(0,0,0,.45);z-index:200}}\n\
+    .drawer-panel{{position:fixed;top:0;right:0;bottom:0;width:280px;\n\
+                   background:{OFF_WHITE};z-index:201;padding:20px 20px 80px;\n\
+                   overflow-y:auto;transform:translateX(100%);\n\
+                   transition:transform .2s ease}}\n\
+    .drawer-chk:checked ~ .drawer-backdrop{{display:block}}\n\
+    .drawer-chk:checked ~ .drawer-panel{{transform:translateX(0)}}\n\
+    .drawer-open-btn{{background:none;border:1px solid {TAN};border-radius:8px;\n\
+                       padding:6px 10px;cursor:pointer;font-size:16px;\n\
+                       color:{BROWN};display:flex;align-items:center;gap:4px;\n\
+                       font-family:inherit}}\n\
+    .drawer-close-btn{{display:block;text-align:right;font-size:20px;\n\
+                        color:{MID};cursor:pointer;margin-bottom:16px;\n\
+                        text-decoration:none}}\n\
   </style>\n\
 </head>\n\
 <body style=\"padding-bottom:72px\">\n\
 \n\
   <div class=\"stripe\"></div>\n\
 \n\
+  <!-- Hamburger drawer (pure CSS) -->\n\
+  <input type=\"checkbox\" id=\"drawer-toggle\" class=\"drawer-chk\">\n\
+  <label for=\"drawer-toggle\" class=\"drawer-backdrop\"></label>\n\
+  <div class=\"drawer-panel\">\n\
+    <label for=\"drawer-toggle\" class=\"drawer-close-btn\">✕</label>\n\
+    <div style=\"font-size:10px;font-weight:700;letter-spacing:.1em;\
+text-transform:uppercase;color:{MID};margin-bottom:4px\">Directory</div>\n\
+    {dir_links}\n\
+    <div style=\"margin-top:20px;font-size:10px;font-weight:700;letter-spacing:.1em;\
+text-transform:uppercase;color:{MID};margin-bottom:4px\">Timeline</div>\n\
+    <a href=\"/?zone=archive&lang={lang}\" style=\"display:flex;align-items:center;gap:10px;\
+padding:10px 0;border-bottom:1px solid {TAN};text-decoration:none;color:{DARK}\">\
+<span style=\"font-size:18px\">📚</span><span style=\"font-size:14px\">Bear Archive</span></a>\n\
+    <a href=\"/?zone=future&lang={lang}\" style=\"display:flex;align-items:center;gap:10px;\
+padding:10px 0;border-bottom:1px solid {TAN};text-decoration:none;color:{DARK}\">\
+<span style=\"font-size:18px\">🔭</span><span style=\"font-size:14px\">Bear Future</span></a>\n\
+    <a href=\"/api/events/ical.ics\" style=\"display:flex;align-items:center;gap:10px;\
+padding:10px 0;text-decoration:none;color:{DARK}\">\
+<span style=\"font-size:18px\">📅</span><span style=\"font-size:14px\">iCal Export</span></a>\n\
+  </div>\n\
+\n\
   <header style=\"max-width:640px;margin:0 auto;padding:10px 16px 8px\">\n\
     <div style=\"display:flex;justify-content:space-between;align-items:center\">\n\
-      <a href=\"/?zone=now&lang={lang}\" \
-style=\"display:flex;align-items:baseline;gap:8px\">\n\
-        <span style=\"font-size:18px;font-weight:700;\
-letter-spacing:.15em;color:{BROWN}\">BEARINGS</span>\n\
+      <a href=\"/?zone=coming-up&lang={lang}\" style=\"display:flex;align-items:baseline;gap:8px\">\n\
+        <span style=\"font-size:18px;font-weight:700;letter-spacing:.15em;\
+color:{BROWN}\">BEARINGS</span>\n\
         <span style=\"font-size:11px;color:{MID}\">global bear community</span>\n\
       </a>\n\
       <div style=\"display:flex;align-items:center;gap:8px\">\n\
-        <div style=\"display:flex;gap:3px;border:1px solid {TAN};\
-border-radius:999px;padding:2px\">{lang_switcher}</div>\n\
-        <a href=\"/api/events/ical.ics\"\n\
-           style=\"font-size:11px;background:{GOLD};color:{DARK};\
-border-radius:999px;\n\
-                  padding:5px 12px;font-weight:600\">📅 iCal</a>\n\
+        <div style=\"display:flex;gap:2px;border:1px solid {TAN};\
+border-radius:999px;padding:2px 3px\">{lang_switcher}</div>\n\
+        <label for=\"drawer-toggle\" class=\"drawer-open-btn\">☰</label>\n\
       </div>\n\
     </div>\n\
   </header>\n\
@@ -188,19 +248,18 @@ border-radius:999px;\n\
   <nav style=\"position:fixed;bottom:0;left:0;right:0;background:{OFF_WHITE};\n\
               border-top:1px solid {TAN};z-index:100\">\n\
     <div style=\"max-width:640px;margin:0 auto;display:flex;\n\
-                justify-content:space-around;align-items:center;padding:6px 8px 10px\">\n\
-      {n_now}{n_coming}{n_archive}{n_digital}{n_future}{n_places}\n\
+                justify-content:space-around;align-items:center;\
+padding:5px 8px 10px\">\n\
+      {n_archive}{n_now}{n_upcoming}{n_future}\n\
     </div>\n\
   </nav>\n\
 \n\
 </body>\n\
 </html>",
-        n_now     = nav("now",           "🐻", "nav.events"),
-        n_coming  = nav("coming-up",     "📍", "nav.timeline"),
-        n_archive = nav("archive",       "📚", "nav.archive"),
-        n_digital = nav("digital-spaces","📱", "nav.digital"),
-        n_future  = nav("future",        "🏛\u{fe0f}", "nav.history"),
-        n_places  = nav("places",        "🍺", "nav.places"),
+        n_archive  = tnav("archive",    "📚", "nav.archive"),
+        n_now      = tnav("now",        "🌎", "nav.events"),
+        n_upcoming = tnav("coming-up",  "📍", "nav.timeline"),
+        n_future   = tnav("future",     "🔭", "nav.history"),
     )
 }
 fn card(c: &str) -> String {
@@ -310,7 +369,7 @@ pub async fn root(
     let lang_owned = match q.lang.as_deref() { Some("es") => "es", Some("fr") => "fr", _ => "en" };
     match q.zone.as_deref().unwrap_or("now") {
         "now"            => zone_now(db, q.month, q.fragment.clone(), lang_owned).await,
-        "coming-up"      => zone_coming_up(db, lang_owned).await,
+        "coming-up"      => zone_coming_up(db, q.months_ahead, q.event_country.clone(), lang_owned).await,
         "archive"        => zone_archive(db, q.decade, q.fragment.clone(), lang_owned).await,
         "future"         => zone_future(db, lang_owned).await,
         "places"         => zone_places(db, q.place_type.clone(), q.place_country.clone(), lang_owned).await,
@@ -320,7 +379,7 @@ pub async fn root(
         "creators"       => zone_creators(db, lang_owned).await,
         "campaigns"      => zone_campaigns(db, lang_owned).await,
         "digital-spaces" => zone_digital(db, lang_owned).await,
-        _                => zone_now(db, None, None, lang_owned).await,
+        _                => zone_coming_up(db, None, None, lang_owned).await,
     }
 }
 
@@ -591,69 +650,86 @@ async fn zone_now(db: SupabaseClient, month_filter: Option<u32>, fragment: Optio
 
 // ── ZONE: COMING UP ───────────────────────────────────────────
 
-async fn zone_coming_up(db: SupabaseClient, lang: &str) -> Response {
+async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>, event_country: Option<String>, lang: &str) -> Response {
+    let months = months_ahead.unwrap_or(6).clamp(1, 24);
+    let country = event_country.as_deref().unwrap_or("");
+
+    // Compute date window
+    let today    = Utc::now().date_naive();
+    let to_date  = today.checked_add_months(Months::new(months)).unwrap_or(today);
+    let from_str = today.format("%Y-%m-%d").to_string();
+    let to_str   = to_date.format("%Y-%m-%d").to_string();
+
+    let country_val = if country.is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::Value::String(country.to_string())
+    };
+
     let rpc_body = serde_json::json!({
-        "input_lat": serde_json::Value::Null, "input_lng": serde_json::Value::Null,
-        "radius_km": serde_json::Value::Null, "season": serde_json::Value::Null,
-        "from_date": serde_json::Value::Null, "to_date": serde_json::Value::Null,
-        "event_type": serde_json::Value::Null, "country": serde_json::Value::Null,
-        "max_rows": 40,
+        "input_lat":    serde_json::Value::Null,
+        "input_lng":    serde_json::Value::Null,
+        "radius_km":    serde_json::Value::Null,
+        "season":       serde_json::Value::Null,
+        "from_date":    from_str,
+        "to_date":      to_str,
+        "event_type":   serde_json::Value::Null,
+        "country":      country_val,
+        "max_rows":     60,
     });
     let data: serde_json::Value = match db.post_rpc("coming_up", &rpc_body).await {
-        Ok(v) => v,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "coming_up failed").into_response(),
+        Ok(v)  => v,
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "coming_up rpc failed").into_response(),
     };
     let events = data["events"].as_array().cloned().unwrap_or_default();
     let venues = data["venues"].as_array().cloned().unwrap_or_default();
 
-    let filter_card = format!(
-        "<div class=\"card\">\
-          <div style=\"font-size:10px;font-weight:700;text-transform:uppercase;\
-                      letter-spacing:.1em;color:{MID};margin-bottom:12px\">Plan a Trip</div>\
-          <form hx-get=\"/?zone=coming-up\" hx-target=\"#cu-results\" hx-swap=\"innerHTML\" hx-indicator=\"#cu-spin\">\
-            <div style=\"margin-bottom:10px\">\
-              <div style=\"font-size:12px;font-weight:600;color:{BROWN};margin-bottom:4px\">Where</div>\
-              <select name=\"country\" style=\"width:100%;padding:9px 12px;border-radius:10px;\
-                     border:1px solid {TAN};background:{OFF_WHITE};font-size:13px\">\
-                <option value=\"\">Anywhere</option>\
-                <option>Canada</option><option>USA</option><option>Germany</option>\
-                <option>UK</option><option>Spain</option><option>Netherlands</option>\
-                <option>Australia</option><option>France</option><option>Portugal</option>\
-              </select>\
-            </div>\
-            <div style=\"display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px\">\
-              <select name=\"season\" style=\"padding:9px 8px;border-radius:10px;\
-                     border:1px solid {TAN};background:{OFF_WHITE};font-size:12px\">\
-                <option value=\"\">Any season</option>\
-                <option value=\"spring\">Spring (Mar–May)</option>\
-                <option value=\"summer\">Summer (Jun–Aug)</option>\
-                <option value=\"autumn\">Autumn (Sep–Nov)</option>\
-                <option value=\"winter\">Winter (Dec–Feb)</option>\
-              </select>\
-              <select name=\"event_type\" style=\"padding:9px 8px;border-radius:10px;\
-                     border:1px solid {TAN};background:{OFF_WHITE};font-size:12px\">\
-                <option value=\"\">Any type</option>\
-                <option value=\"bear-run\">Bear Run</option>\
-                <option value=\"cruise\">Cruise</option>\
-                <option value=\"social\">Social</option>\
-                <option value=\"party-night\">Party Night</option>\
-              </select>\
-            </div>\
-            <button type=\"submit\" class=\"btn-o\" style=\"width:100%;padding:10px;text-align:center\">Find events →</button>\
-          </form>\
-          <div id=\"cu-spin\" class=\"htmx-indicator\">Searching…</div>\
-        </div>"
-    );
+    // ── Selectors ─────────────────────────────────────────────
+    let sel_style = "width:100%;padding:10px 12px;border-radius:12px;\
+                     border:1px solid {TAN};background:#fff;\
+                     font-size:13px;color:{DARK};font-family:inherit";
 
-    let ical_block = format!(
-        "<div style=\"border-radius:16px;border:1px solid {GOLD};\
-             background:#FFFEF5;padding:16px;text-align:center;margin-bottom:4px\">\
-          <div style=\"font-weight:600;font-size:13px;color:{BROWN};margin-bottom:4px\">📅 Subscribe to this calendar</div>\
-          <div style=\"font-size:11px;color:{MID};margin-bottom:12px\">Auto-updates in Apple Calendar, Google Calendar, any iCal app</div>\
-          <a href=\"/api/events/ical.ics\" class=\"btn-g\">Subscribe — All Events</a>\
-        </div>"
-    );
+    let months_opts: &[(u32, &str)] = &[
+        (1, "Next month"), (2, "Next 2 months"), (3, "Next 3 months"),
+        (6, "Next 6 months"), (12, "Next year"),
+    ];
+    let months_sel: String = months_opts.iter().map(|(v, l)| {
+        let sel = if *v == months { " selected" } else { "" };
+        format!("<option value=\"{v}\"{sel}>{l}</option>")
+    }).collect();
 
+    // Country groups
+    let regions: &[(&str, &[&str])] = &[
+        ("North America",  &["Canada", "USA", "Mexico"]),
+        ("Europe",         &["Belgium","Czech Republic","France","Germany","Iceland",
+                              "Ireland","Italy","Luxembourg","Netherlands","Poland",
+                              "Portugal","Scotland","Spain","Sweden","Switzerland","UK"]),
+        ("Asia Pacific",   &["Australia","Japan","New Zealand","Thailand"]),
+        ("Latin America",  &["Brazil","Argentina","Chile","Colombia","Mexico"]),
+        ("Africa & Middle East", &["South Africa","Egypt","Morocco"]),
+    ];
+    let world_sel = if country.is_empty() { " selected" } else { "" };
+    let mut country_opts = format!("<option value=\"\"{world_sel}>🌍 Worldwide</option>");
+    for (region, countries) in regions {
+        country_opts.push_str(&format!("<optgroup label=\"{region}\">"));
+        for c in *countries {
+            let sel = if *c == country { " selected" } else { "" };
+            country_opts.push_str(&format!("<option value=\"{c}\"{sel}>{c}</option>"));
+        }
+        country_opts.push_str("</optgroup>");
+    }
+
+    let where_label = if country.is_empty() { "Worldwide".to_string() }
+                      else { country.to_string() };
+    let month_label = months_opts.iter()
+        .find(|(v, _)| *v == months)
+        .map(|(_, l)| *l)
+        .unwrap_or("6 months");
+
+    // ── Monthly bar chart ─────────────────────────────────────
+    let bar = timeline_bar(&events, None);
+
+    // ── Event cards ───────────────────────────────────────────
     let ev_cards: String = events.iter().map(|ev| {
         let name  = ev["name"].as_str().unwrap_or("");
         let city  = ev["city"].as_str().unwrap_or("");
@@ -663,16 +739,19 @@ async fn zone_coming_up(db: SupabaseClient, lang: &str) -> Response {
         let link  = ev["link"].as_str().unwrap_or("");
         let etype = ev["type"].as_str().unwrap_or("");
         let fs    = ev_flags(ev);
-        let dates = if !end.is_empty() && end != start { format!("{start} → {end}") }
-                    else { start.to_string() };
+        let dates = if !end.is_empty() && end != start {
+            format!("{start} → {end}")
+        } else { start.to_string() };
         let link_html = if !link.is_empty() && link != "#" {
             format!("<a href=\"{link}\" target=\"_blank\" rel=\"noopener\" class=\"btn-o\">Info</a>")
         } else { String::new() };
         card(&format!(
-            "<div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:10px\">\
+            "<div style=\"display:flex;justify-content:space-between;\
+                         align-items:flex-start;gap:10px\">\
               <div style=\"flex:1;min-width:0\">\
                 <div style=\"font-weight:600;font-size:14px;line-height:1.3\">{name}</div>\
-                <div style=\"font-size:12px;color:{MID};margin-top:2px\">{city}, {ctry} · {dates}</div>\
+                <div style=\"font-size:12px;color:{MID};margin-top:2px\">\
+                  {city}{sep}{ctry} · {dates}</div>\
                 <div style=\"margin-top:5px;display:flex;flex-wrap:wrap;gap:2px\">\
                   <span class=\"badge\" style=\"background:{TAN};color:{BROWN}\">{etype}</span>\
                   {fhtml}\
@@ -680,49 +759,99 @@ async fn zone_coming_up(db: SupabaseClient, lang: &str) -> Response {
               </div>\
               {link_html}\
             </div>",
+            sep   = if !city.is_empty() && !ctry.is_empty() { ", " } else { "" },
             fhtml = flags(&fs),
         ))
     }).collect();
 
-    let vn_cards: String = venues.iter().take(4).map(|v| {
+    let empty_html = if events.is_empty() {
+        format!(
+            "<div style=\"text-align:center;padding:32px 0;color:{MID}\">\
+              <div style=\"font-size:32px;margin-bottom:8px\">🐻</div>\
+              <div style=\"font-size:14px;font-weight:600\">No events found</div>\
+              <div style=\"font-size:12px;margin-top:4px\">\
+                Try a longer time window or a different region.</div>\
+            </div>"
+        )
+    } else { String::new() };
+
+    // iCal subscribe block
+    let ical_block = format!(
+        "<div style=\"border-radius:14px;border:1px solid {GOLD};\
+             background:#FFFEF5;padding:14px 16px;margin-bottom:10px;\
+             display:flex;justify-content:space-between;align-items:center;gap:12px\">\
+          <div>\
+            <div style=\"font-weight:600;font-size:12px;color:{BROWN};margin-bottom:2px\">\
+              📅 Subscribe to bear events</div>\
+            <div style=\"font-size:11px;color:{MID}\">Auto-updates in any calendar app</div>\
+          </div>\
+          <a href=\"/api/events/ical.ics\" class=\"btn-g\">iCal</a>\
+        </div>"
+    );
+
+    // Venues section (compact)
+    let vn_cards: String = venues.iter().take(3).map(|v| {
         let name  = v["name"].as_str().unwrap_or("");
         let ptype = v["place_type"].as_str().unwrap_or("");
         let city  = v["city"].as_str().unwrap_or("");
         let ctry  = v["country"].as_str().unwrap_or("");
-        let hours = v["hours_open"].as_str().unwrap_or("");
         let site  = v["website"].as_str().unwrap_or("");
-        let site_html = if !site.is_empty() && site != "#" {
-            format!("<a href=\"{site}\" target=\"_blank\" rel=\"noopener\" style=\"font-size:12px;color:{ORANGE}\">Visit →</a>")
+        let site_btn = if !site.is_empty() && site != "#" {
+            format!("<a href=\"{site}\" target=\"_blank\" class=\"btn-t\">Visit</a>")
         } else { String::new() };
         card(&format!(
-            "<div>\
-              <div style=\"font-weight:600;font-size:14px\">{name}\
-                <span style=\"font-weight:400;font-size:11px;color:{MID}\"> {ptype}</span>\
+            "<div style=\"display:flex;justify-content:space-between;align-items:center\">\
+              <div>\
+                <div style=\"font-weight:600;font-size:13px\">{name}\
+                  <span style=\"font-weight:400;font-size:11px;color:{MID}\"> {ptype}</span></div>\
+                <div style=\"font-size:12px;color:{MID}\">{city}, {ctry}</div>\
               </div>\
-              <div style=\"font-size:12px;color:{MID}\">{city}, {ctry}</div>\
-              {hours_html}\
-              {site_html}\
-            </div>",
-            hours_html = if !hours.is_empty() {
-                format!("<div style=\"font-size:11px;color:{GOLD};margin-top:3px\">🕐 {}</div>",
-                    hours.chars().take(60).collect::<String>())
-            } else { String::new() },
+              {site_btn}\
+            </div>"
         ))
     }).collect();
 
     let body = format!(
-        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Plan a Trip</h1>\
-        <p style=\"font-size:12px;color:{MID};margin-bottom:16px\">Set your destination and season to find events and venues.</p>\
-        {filter_card}\
-        {ical_block}\
-        <div id=\"cu-results\">\
-          {h_ev}{ev_cards}\
-          {h_vn}{vn_cards}\
+        "<div style=\"text-align:center;padding:20px 0 12px\">\
+          <h1 style=\"font-size:22px;font-weight:700;color:{BROWN};line-height:1.2;\
+                      margin-bottom:6px\">When &amp; Where<br>\
+            <span style=\"font-size:15px;font-weight:400;color:{MID}\">do you want to meet?</span>\
+          </h1>\
+        </div>\
+        \
+        <form id=\"upcoming-filters\"\
+              hx-get=\"/?zone=coming-up\"\
+              hx-target=\"#upcoming-results\"\
+              hx-select=\"#upcoming-results\"\
+              hx-swap=\"outerHTML\"\
+              hx-trigger=\"change from:#upcoming-filters\"\
+              hx-indicator=\"#cu-spin\"\
+              style=\"margin-bottom:12px\">\
+          <input type=\"hidden\" name=\"lang\" value=\"{lang}\">\
+          <div style=\"display:grid;grid-template-columns:1fr 1fr;gap:8px\">\
+            <select name=\"months_ahead\" style=\"{sel_style}\">{months_sel}</select>\
+            <select name=\"event_country\" style=\"{sel_style}\">{country_opts}</select>\
+          </div>\
+        </form>\
+        \
+        <div id=\"cu-spin\" class=\"htmx-indicator\">Finding events…</div>\
+        \
+        {bar}\
+        \
+        <div id=\"upcoming-results\">\
+          {h_ev}\
+          {ev_cards}\
+          {empty_html}\
+          {ical_block}\
+          {h_vn}\
+          {vn_cards}\
         </div>",
-        h_ev = sh("Upcoming Events", Some(events.len())),
-        h_vn = sh("Venues in Destination", Some(venues.len())),
+        h_ev  = sh(&format!("{month_label} · {where_label}"), Some(events.len())),
+        h_vn  = if venues.is_empty() { String::new() } else {
+            sh(&format!("Venues in {where_label}"), Some(venues.len()))
+        },
     );
-    Html(shell("Coming Up", "Plan your bear trips.", "coming-up", &body, lang)).into_response()
+    Html(shell("Upcoming Events", "Find bear events near you.", "coming-up", &body, lang)).into_response()
 }
 
 // ── ZONE: BEAR ARCHIVES (decade tabs) ────────────────────────
@@ -1576,7 +1705,7 @@ async fn zone_digital(db: SupabaseClient, lang: &str) -> Response {
 // These delegate to zone functions. Remove once Gaspar confirms ?zone= routing.
 
 pub async fn now_page           (State(db): State<SupabaseClient>) -> Response { zone_now(db, None, None, "en").await }
-pub async fn coming_up_page     (State(db): State<SupabaseClient>) -> Response { zone_coming_up(db, "en").await }
+pub async fn coming_up_page     (State(db): State<SupabaseClient>) -> Response { zone_coming_up(db, None, None, "en").await }
 pub async fn history_page       (State(db): State<SupabaseClient>) -> Response { zone_archive(db, None, None, "en").await }
 pub async fn bear_future_page   (State(db): State<SupabaseClient>) -> Response { zone_future(db, "en").await }
 pub async fn events_page        (State(db): State<SupabaseClient>) -> Response { zone_events(db, None, "en").await }
