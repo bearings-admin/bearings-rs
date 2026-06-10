@@ -300,7 +300,7 @@ fn stat_row() -> String {
     )).collect::<Vec<_>>().join("")
 }
 
-fn timeline_bar(evs: &[serde_json::Value], active_month: Option<u32>) -> String {
+fn timeline_bar(evs: &[serde_json::Value], active_month: Option<u32>, href_base: &str, hx_target: &str) -> String {
     let months = ["Jan","Feb","Mar","Apr","May","Jun",
                   "Jul","Aug","Sep","Oct","Nov","Dec"];
     let bear_col = [DARK,MID,BROWN,BROWN,ORANGE,ORANGE,
@@ -308,7 +308,6 @@ fn timeline_bar(evs: &[serde_json::Value], active_month: Option<u32>) -> String 
     let mut counts = [0usize; 12];
     for e in evs {
         if let Some(d) = e["start_date"].as_str() {
-            // Split on '-' using string slice, not char literal
             let parts: Vec<&str> = d.splitn(3, '-').collect();
             if let Some(m) = parts.get(1).and_then(|s| s.parse::<usize>().ok()) {
                 if m >= 1 && m <= 12 { counts[m-1] += 1; }
@@ -323,11 +322,18 @@ fn timeline_bar(evs: &[serde_json::Value], active_month: Option<u32>) -> String 
         let lc  = if on { ORANGE } else { MID };
         let fw  = if on { "700" } else { "400" };
         let cnt = if counts[i] > 0 { counts[i].to_string() } else { String::new() };
+        let htmx = if !hx_target.is_empty() {
+            format!(
+                " hx-get=\"{href_base}&month={mn}\"\
+                  hx-target=\"{tgt}\" hx-select=\"{tgt}\" hx-swap=\"outerHTML\"\
+                  hx-indicator=\"#bar-spin\"",
+                mn  = i + 1,
+                tgt = hx_target,
+                href_base = href_base,
+            )
+        } else { String::new() };
         format!(
-            "<a href=\"/?zone=now&month={mn}\"\
-               hx-get=\"/?zone=now&month={mn}&fragment=events\"\
-               hx-target=\"#event-list\" hx-swap=\"innerHTML\"\
-               hx-indicator=\"#bar-spin\"\
+            "<a href=\"{href_base}&month={mn}\"{htmx}\
                style=\"flex:1;display:flex;flex-direction:column;align-items:center;gap:2px\"\
                title=\"{lbl}: {n} events\">\
               <span style=\"font-size:9px;color:{lc};font-weight:{fw}\">{cnt}</span>\
@@ -339,12 +345,19 @@ fn timeline_bar(evs: &[serde_json::Value], active_month: Option<u32>) -> String 
             n   = counts[i],
         )
     }).collect();
+    let clear_link = if active_month.is_some() {
+        format!(
+            "<a href=\"{href_base}\" style=\"font-size:10px;color:{ORANGE};text-decoration:none;\
+              display:block;text-align:right;margin-top:4px\">✕ clear filter</a>"
+        )
+    } else { String::new() };
     format!(
         "<div class=\"card\" style=\"padding:12px 14px\">\
           <div style=\"font-size:10px;font-weight:600;color:{MID};margin-bottom:8px;\
                       text-transform:uppercase;letter-spacing:.08em\">Events by month · click to filter</div>\
           <div style=\"display:flex;gap:3px;align-items:flex-end;height:56px\">{bars}</div>\
           <div id=\"bar-spin\" class=\"htmx-indicator\">loading…</div>\
+          {clear_link}\
         </div>"
     )
 }
@@ -369,7 +382,7 @@ pub async fn root(
     let lang_owned = match q.lang.as_deref() { Some("es") => "es", Some("fr") => "fr", _ => "en" };
     match q.zone.as_deref().unwrap_or("now") {
         "now"            => zone_now(db, q.month, q.fragment.clone(), lang_owned).await,
-        "coming-up"      => zone_coming_up(db, q.months_ahead, q.event_country.clone(), lang_owned).await,
+        "coming-up"      => zone_coming_up(db, q.months_ahead, q.event_country.clone(), q.month, lang_owned).await,
         "archive"        => zone_archive(db, q.decade, q.fragment.clone(), lang_owned).await,
         "future"         => zone_future(db, lang_owned).await,
         "places"         => zone_places(db, q.place_type.clone(), q.place_country.clone(), lang_owned).await,
@@ -379,7 +392,7 @@ pub async fn root(
         "creators"       => zone_creators(db, lang_owned).await,
         "campaigns"      => zone_campaigns(db, lang_owned).await,
         "digital-spaces" => zone_digital(db, lang_owned).await,
-        _                => zone_coming_up(db, None, None, lang_owned).await,
+        _                => zone_coming_up(db, None, None, None, lang_owned).await,
     }
 }
 
@@ -638,7 +651,7 @@ async fn zone_now(db: SupabaseClient, month_filter: Option<u32>, fragment: Optio
         <a href=\"/?zone=titles\" style=\"display:block;text-align:center;font-size:13px;\
            color:{ORANGE};padding:8px 0 24px\">Full title archive (87 records) →</a>",
         stats    = stats_html,
-        bar      = timeline_bar(&all_evs, month_filter),
+        bar      = timeline_bar(&all_evs, month_filter, "/?zone=now", "#event-list"),
         h_events = sh(&events_label, Some(displayed.len())),
         h_venues = sh("Nearby Venues", Some(near.len())),
         h_camps  = sh("Community Campaigns", Some(cmpg.len())),
@@ -650,7 +663,7 @@ async fn zone_now(db: SupabaseClient, month_filter: Option<u32>, fragment: Optio
 
 // ── ZONE: COMING UP ───────────────────────────────────────────
 
-async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>, event_country: Option<String>, lang: &str) -> Response {
+async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>, event_country: Option<String>, month_filter: Option<u32>, lang: &str) -> Response {
     let months = months_ahead.unwrap_or(6).clamp(1, 24);
     let country = event_country.as_deref().unwrap_or("");
 
@@ -726,11 +739,28 @@ async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>, event_cou
         .map(|(_, l)| *l)
         .unwrap_or("6 months");
 
-    // ── Monthly bar chart ─────────────────────────────────────
-    let bar = timeline_bar(&events, None);
+    // ── Monthly bar chart + optional month filter ───────────────
+    let country_enc = if country.is_empty() { String::new() } else {
+        format!("&event_country={}", country.replace(' ', "%20"))
+    };
+    let bar_base = format!("/?zone=coming-up&months_ahead={months}&lang={lang}{country_enc}");
+    let bar = timeline_bar(&events, month_filter, &bar_base, "#upcoming-results");
+
+    // Filter displayed events by selected month
+    let disp_events: Vec<serde_json::Value> = if let Some(m) = month_filter {
+        events.iter().filter(|ev| {
+            ev["start_date"].as_str()
+                .and_then(|d| d.splitn(3, '-').nth(1))
+                .and_then(|s| s.parse::<u32>().ok())
+                .map(|em| em == m)
+                .unwrap_or(false)
+        }).cloned().collect()
+    } else {
+        events.clone()
+    };
 
     // ── Event cards ───────────────────────────────────────────
-    let ev_cards: String = events.iter().map(|ev| {
+    let ev_cards: String = disp_events.iter().map(|ev| {
         let name  = ev["name"].as_str().unwrap_or("");
         let city  = ev["city"].as_str().unwrap_or("");
         let ctry  = ev["country"].as_str().unwrap_or("");
@@ -764,7 +794,7 @@ async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>, event_cou
         ))
     }).collect();
 
-    let empty_html = if events.is_empty() {
+    let empty_html = if disp_events.is_empty() {
         format!(
             "<div style=\"text-align:center;padding:32px 0;color:{MID}\">\
               <div style=\"font-size:32px;margin-bottom:8px\">🐻</div>\
@@ -846,7 +876,7 @@ async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>, event_cou
           {h_vn}\
           {vn_cards}\
         </div>",
-        h_ev  = sh(&format!("{month_label} · {where_label}"), Some(events.len())),
+        h_ev  = sh(&format!("{month_label} · {where_label}"), Some(disp_events.len())),
         h_vn  = if venues.is_empty() { String::new() } else {
             sh(&format!("Venues in {where_label}"), Some(venues.len()))
         },
@@ -1063,78 +1093,269 @@ fn build_timeline(entries: &[&serde_json::Value]) -> String {
 // ── ZONE: BEAR FUTURE ─────────────────────────────────────────
 
 async fn zone_future(db: SupabaseClient, lang: &str) -> Response {
-    // Load community proposals (reframed as ideas, no crypto required)
-    let p_url = format!(
-        "{}/rest/v1/bear_future_proposals?active=eq.true&order=created_at.desc&limit=10",
+    // Fetch active campaigns
+    let url_camps = format!(
+        "{}/rest/v1/campaigns\
+         ?active=eq.true\
+         &select=name,org,description,link,raised,goal,currency,urgent,ends_at\
+         &order=urgent.desc,ends_at.asc.nullslast\
+         &limit=20",
         db.url
     );
-    let proposals: Vec<serde_json::Value> = db.get_json(&p_url).await.unwrap_or_default();
+    // Fetch recent competitions (last 3 years = milestones)
+    let url_recent_comps = format!(
+        "{}/rest/v1/title_holders\
+         ?year=gte.2023\
+         &select=holder_name,year,city,country,title_name,competition_id,inclusion_flag_codes,bio\
+         &order=year.desc&limit=20",
+        db.url
+    );
+    let (camps_res, recent_res) = tokio::join!(
+        db.get_json::<Vec<serde_json::Value>>(&url_camps),
+        db.get_json::<Vec<serde_json::Value>>(&url_recent_comps),
+    );
+    let campaigns    = camps_res.unwrap_or_default();
+    let recent_title = recent_res.unwrap_or_default();
 
-    let proposals_html: String = if proposals.is_empty() {
-        format!(
-            "<div style=\"border-radius:16px;border:2px dashed {TAN};\
-                 padding:24px;text-align:center;margin-bottom:12px\">\
-              <div style=\"font-weight:600;font-size:14px;color:{BROWN};margin-bottom:6px\">No ideas yet</div>\
-              <div style=\"font-size:12px;color:{MID};line-height:1.6\">\
-                Community ideas and proposals will appear here.\
-                Submit ideas via the steward email.</div>\
-            </div>"
-        )
-    } else {
-        proposals.iter().map(|p| {
-            let title = p["title"].as_str().unwrap_or("Idea");
-            let desc  = p["description"].as_str().unwrap_or("");
-            let cat   = p["cause_category"].as_str().unwrap_or("");
-            card(&format!(
-                "<div>\
-                  <div style=\"font-weight:600;font-size:14px\">{title}</div>\
-                  {cat_html}\
-                  <div style=\"font-size:12px;color:{MID};margin-top:4px;line-height:1.6\">{desc}</div>\
-                </div>",
-                cat_html = if !cat.is_empty() {
-                    format!("<span style=\"font-size:11px;color:{ORANGE};font-weight:600\">{cat}</span>")
-                } else { String::new() },
-            ))
-        }).collect()
-    };
+    // ── Section 1: Active Campaigns ───────────────────────────
+    let camp_cards: String = campaigns.iter().map(|c| {
+        let name    = c["name"].as_str().unwrap_or("");
+        let org     = c["org"].as_str().unwrap_or("");
+        let desc    = c["description"].as_str().unwrap_or("");
+        let link    = c["link"].as_str().unwrap_or("");
+        let raised  = c["raised"].as_i64();
+        let goal    = c["goal"].as_i64();
+        let curr    = c["currency"].as_str().unwrap_or("USD");
+        let urgent  = c["urgent"].as_bool().unwrap_or(false);
+        let ends    = c["ends_at"].as_str().unwrap_or("");
 
-    let vision_card = format!(
-        "<div class=\"card\" style=\"margin-bottom:12px\">\
-          <div style=\"font-size:10px;font-weight:700;text-transform:uppercase;\
-                      letter-spacing:.1em;color:{MID};margin-bottom:10px\">About Bear Future</div>\
-          <div style=\"font-size:13px;line-height:1.7;color:{DARK}\">\
-            Bearings is community infrastructure — built by and for the bear world.\
-            Bear Future is where the community decides what comes next:<br><br>\
-            <strong>Archive endowment</strong> — keeping competition history permanently funded.<br>\
-            <strong>Senior bear programs</strong> — reaching isolated community elders.<br>\
-            <strong>Camp accessibility</strong> — grants for campgrounds to become more accessible.<br>\
-            <strong>New territories</strong> — which regions need more coverage first.\
+        let progress_html = match (raised, goal) {
+            (Some(r), Some(g)) if g > 0 => {
+                let pct = ((r as f64 / g as f64) * 100.0).min(100.0);
+                let r_fmt = if r >= 1_000_000 { format!("${:.1}M", r as f64/1_000_000.0) }
+                            else if r >= 1_000 { format!("${:.0}k", r as f64/1_000.0) }
+                            else { format!("${r}") };
+                let g_fmt = if g >= 1_000_000 { format!("${:.1}M", g as f64/1_000_000.0) }
+                            else if g >= 1_000 { format!("${:.0}k", g as f64/1_000.0) }
+                            else { format!("${g}") };
+                format!(
+                    "<div style=\"margin:8px 0\">\
+                      <div style=\"background:{TAN};border-radius:4px;height:6px;overflow:hidden\">\
+                        <div style=\"background:{ORANGE};height:100%;width:{pct:.0}%\"></div>\
+                      </div>\
+                      <div style=\"font-size:10px;color:{MID};margin-top:2px\">\
+                        {r_fmt} raised of {g_fmt} {curr}</div>\
+                    </div>"
+                )
+            },
+            (Some(r), None) => {
+                let r_fmt = if r >= 1_000_000 { format!("${:.1}M", r as f64/1_000_000.0) }
+                            else if r >= 1_000 { format!("${:.0}k", r as f64/1_000.0) }
+                            else { format!("${r}") };
+                format!("<div style=\"font-size:11px;color:{ORANGE};margin:4px 0\">{r_fmt} raised {curr}</div>")
+            },
+            _ => String::new(),
+        };
+
+        let link_btn = if !link.is_empty() && link != "#" {
+            format!("<a href=\"{link}\" target=\"_blank\" rel=\"noopener\" class=\"btn-o\">Donate</a>")
+        } else { String::new() };
+
+        let ends_html = if !ends.is_empty() {
+            format!("<div style=\"font-size:10px;color:{MID}\">Ends {ends}</div>")
+        } else { String::new() };
+
+        let urgent_badge = if urgent {
+            format!("<span style=\"font-size:9px;background:#C0392B;color:#fff;\
+                      border-radius:6px;padding:2px 6px;margin-right:4px\">URGENT</span>")
+        } else { String::new() };
+
+        card(&format!(
+            "<div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:10px\">\
+              <div style=\"flex:1;min-width:0\">\
+                <div style=\"font-weight:600;font-size:14px;line-height:1.3\">\
+                  {urgent_badge}{name}</div>\
+                <div style=\"font-size:11px;color:{ORANGE};font-weight:600;margin:2px 0\">{org}</div>\
+                <div style=\"font-size:12px;color:{MID};line-height:1.6;margin-top:4px\">\
+                  {short_desc}</div>\
+                {progress_html}\
+                {ends_html}\
+              </div>\
+              <div style=\"flex-shrink:0\">{link_btn}</div>\
+            </div>",
+            short_desc = desc.chars().take(220).collect::<String>(),
+        ))
+    }).collect();
+
+    // ── Section 2: Breaking Ground — recent milestones ────────
+    let milestone_cards: String = recent_title.iter().map(|h| {
+        let name  = h["holder_name"].as_str().unwrap_or("");
+        let year  = h["year"].as_i64().unwrap_or(0);
+        let title = h["title_name"].as_str().unwrap_or("");
+        let city  = h["city"].as_str().unwrap_or("");
+        let ctry  = h["country"].as_str().unwrap_or("");
+        let bio   = h["bio"].as_str().unwrap_or("");
+        let fs: Vec<String> = h["inclusion_flag_codes"].as_array()
+            .map(|v| v.iter().filter_map(|s| s.as_str().map(String::from)).collect())
+            .unwrap_or_default();
+        card(&format!(
+            "<div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:10px\">\
+              <div style=\"flex:1\">\
+                <div style=\"font-weight:600;font-size:14px\">{name}</div>\
+                <div style=\"font-size:11px;color:{ORANGE};font-weight:600\">{title}</div>\
+                <div style=\"font-size:11px;color:{MID}\">{loc}</div>\
+                {bio_h}\
+                {fhtml}\
+              </div>\
+              <div style=\"font-size:20px;font-weight:700;color:{GOLD};flex-shrink:0\">{year}</div>\
+            </div>",
+            loc   = match (city, ctry) {
+                (c, ct) if !c.is_empty() && !ct.is_empty() => format!("{c}, {ct}"),
+                (c, _)  if !c.is_empty() => c.to_string(),
+                (_, ct) if !ct.is_empty() => ct.to_string(),
+                _ => String::new(),
+            },
+            bio_h = if !bio.is_empty() {
+                format!("<div style=\"font-size:11px;color:{MID};margin-top:4px;line-height:1.5\">{}</div>",
+                    bio.chars().take(200).collect::<String>())
+            } else { String::new() },
+            fhtml = if !fs.is_empty() {
+                format!("<div style=\"margin-top:4px\">{}</div>", flags(&fs))
+            } else { String::new() },
+        ))
+    }).collect();
+
+    // ── Section 3: New Bear Territories ──────────────────────
+    let regions_html = format!(
+        "<div class=\"card\">\
+          <div style=\"font-size:13px;line-height:1.8;color:{DARK}\">\
+            <p style=\"margin:0 0 10px\">The bear community is growing into new regions — some with full support \
+              from local law and culture, others where community members face serious legal risk.</p>\
+            <p style=\"margin:0 0 8px\">Safety data is maintained by \
+              <a href=\"https://ilga.org\" target=\"_blank\" rel=\"noopener\" \
+                 style=\"color:{ORANGE}\">ILGA World</a> \
+              (International Lesbian, Gay, Bisexual, Trans and Intersex Association), \
+              which tracks the legal status of same-sex relationships in every country.</p>\
+            <div style=\"border-left:3px solid {ORANGE};padding-left:12px;margin:10px 0\">\
+              <strong style=\"color:{BROWN}\">Malaysia</strong> — Homosexuality is criminalized under both \
+              civil and Sharia law. In 2026, Mr Bear International titleholder Gavin Chow (the first \
+              Malaysian to hold the title) struggled to find a venue willing to host the national qualifier. \
+              His reign is an act of visibility under genuine personal risk.\
+            </div>\
+            <div style=\"border-left:3px solid {GOLD};padding-left:12px;margin:10px 0\">\
+              <strong style=\"color:{BROWN}\">Middle East & North Africa</strong> — \
+              Bilal Sakr (Mr Bear Canada 2025), the first openly Middle Eastern titleholder of a major \
+              bear competition, actively fundraises for Rainbow Railroad supporting LGBTQ+ refugees \
+              from the region. Bear community connections have quietly been one pathway to finding \
+              safety for queer people fleeing state-sponsored persecution.\
+            </div>\
+            <div style=\"border-left:3px solid {TAN};padding-left:12px;margin:10px 0\">\
+              <strong style=\"color:{BROWN}\">Eastern Europe & Central Asia</strong> — \
+              Several cities have active if discreet bear communities. Legal protections vary widely; \
+              Poland and Czech Republic have established competitions; Hungary has regressed on rights. \
+              ILGA's rainbow map is the current best reference.\
+            </div>\
+            <div style=\"border-left:3px solid {TAN};padding-left:12px;margin:10px 0\">\
+              <strong style=\"color:{BROWN}\">Sub-Saharan Africa & South/Southeast Asia</strong> — \
+              South Africa remains the continent's primary bear hub with legal protections; \
+              Thailand hosts Mr Bear International (IBC Bangkok) with a growing scene. \
+              Other countries require significant caution — check ILGA data before travel.\
+            </div>\
+            <div style=\"margin-top:12px;font-size:11px;color:{MID}\">\
+              🏳️‍🌈 Trans-inclusive events: most competitions now explicitly welcome trans titleholders. \
+              First confirmed: Mr Australasia Bear (2024), following a first trans titleholder. \
+              This is actively discussed at international level.\
+            </div>\
           </div>\
         </div>"
     );
 
-    let contact_card = format!(
-        "<div class=\"card\" style=\"text-align:center;margin-top:8px\">\
-          <div style=\"font-size:12px;color:{MID};margin-bottom:6px\">Have an idea for the community?</div>\
-          <a href=\"mailto:ursasteward@pm.me\" class=\"btn-o\">Submit an idea</a>\
-        </div>"
-    );
+    // ── Section 4: What's Coming — hardcoded trends ──────────
+    let trends: &[(&str, &str, &str)] = &[
+        ("🏕️", "Bear Camp Infrastructure",
+         "Most bear campgrounds are 30–50 years old. Accessibility upgrades — ramps, accessible cabins, \
+          mobility aid charging — are underfunded but increasingly discussed. Camp Davis (FL) and Cedars (ON) \
+          have started conversations. This is the next frontier for bear philanthropy."),
+        ("👴", "Senior Bear Programs",
+         "As early community members age, social isolation among bear elders is a documented concern. \
+          Ottawa Senior Pride Network (OSPN) models what's possible at the city level. \
+          A bear-specific senior outreach program — similar to SAGE in the USA — is a gap waiting to be filled."),
+        ("📚", "Archive Endowment",
+         "IBR records (1992–2011) exist because someone kept them. For competitions without institutional \
+          backing, history disappears when a club folds. A small endowment fund for archival digitization — \
+          photos, programmes, contestant lists — could preserve decades of community history at relatively \
+          low cost."),
+        ("🌐", "Regional Bear Councils",
+         "Mr Bear Europe (Lisbon) and Mr Australasia (Melbourne) model regional coordination. \
+          A Latin American tier and a Southeast Asian tier are natural next steps as those communities \
+          grow. Both would need host cities willing to absorb logistical risk in legally complex environments."),
+        ("🏳️‍⚧️", "Trans & Non-Binary Inclusion Tracks",
+         "Several competitions now explicitly welcome trans and non-binary entrants. \
+          The next step is formal inclusion language in competition bylaws and a voluntary disclosure \
+          framework for titleholders who want to be public about their identity — without outing anyone."),
+        ("🤝", "Bear Club Mutual Aid Networks",
+         "During COVID, bear clubs quietly helped members with food, housing, and medical costs. \
+          Formalizing this — a shared emergency fund between clubs — would give the community \
+          infrastructure it already informally uses, with tax-deductible receipts."),
+        ("📱", "Bear Business Directory Growth",
+         "Bear-owned businesses (Etsy, Bandcamp, small labels, art studios) are underrepresented in \
+          community directories. A verified bear-owned business badge — similar to what Bearings tracks now \
+          for shops — could drive community economic circulation."),
+        ("🧭", "Refugee & Asylum Bear Network",
+         "Informal networks already exist. What's missing is a structured referral pipeline from \
+          bear clubs in destination countries to settlement organizations like Rainbow Railroad. \
+          Bear clubs in Toronto, Berlin, Amsterdam and Melbourne are natural hubs."),
+    ];
 
-    let page_future_title = i18n::t(i18n::translations(), lang, "page.history.title");
+    let trend_cards: String = trends.iter().map(|(icon, title, desc)| {
+        card(&format!(
+            "<div>\
+              <div style=\"font-size:15px;font-weight:700;color:{BROWN};margin-bottom:4px\">\
+                {icon} {title}</div>\
+              <div style=\"font-size:12px;color:{MID};line-height:1.7\">{desc}</div>\
+            </div>"
+        ))
+    }).collect();
+
     let body = format!(
-        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">{page_future_title}</h1>\
+        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Bear Future</h1>\
         <p style=\"font-size:12px;color:{MID};margin-bottom:16px\">\
-          Where the community decides what comes next.</p>\
-        {vision_card}\
-        {h_props}\
-        {proposals_html}\
-        {contact_card}",
-        h_props = sh("Community Ideas", Some(proposals.len())),
+          How bears are already making tomorrow better — and what comes next.</p>\
+        \
+        {h1}\
+        {camp_cards}\
+        {empty_camps}\
+        \
+        {h2}\
+        {milestone_cards}\
+        {empty_milestones}\
+        \
+        {h3}\
+        {regions_html}\
+        \
+        {h4}\
+        {trend_cards}\
+        \
+        <div class=\"card\" style=\"text-align:center;margin-top:8px\">\
+          <div style=\"font-size:12px;color:{MID};margin-bottom:6px\">\
+            Have an idea for the community?</div>\
+          <a href=\"mailto:ursasteward@pm.me\" class=\"btn-o\">Submit an idea</a>\
+        </div>",
+        h1 = sh("Bears Taking Action", Some(campaigns.len())),
+        h2 = sh("Breaking Ground — Recent Milestones", Some(recent_title.len())),
+        h3 = "<div style=\"font-size:14px;font-weight:700;color:{BROWN};margin:12px 0 6px;\
+               border-left:3px solid {ORANGE};padding-left:8px\">New Bear Territories</div>",
+        h4 = "<div style=\"font-size:14px;font-weight:700;color:{BROWN};margin:12px 0 6px;\
+               border-left:3px solid {GOLD};padding-left:8px\">What's Coming</div>",
+        empty_camps = if campaigns.is_empty() {
+            format!("<div style=\"font-size:12px;color:{MID};padding:8px\">No active campaigns found.</div>")
+        } else { String::new() },
+        empty_milestones = if recent_title.is_empty() {
+            format!("<div style=\"font-size:12px;color:{MID};padding:8px\">No recent titleholders found.</div>")
+        } else { String::new() },
     );
-    Html(shell("Bear Future", "Community direction and proposals.", "future", &body, lang)).into_response()
+    Html(shell("Bear Future", "Community direction and what comes next.", "future", &body, lang)).into_response()
 }
-
-// ── SUPPLEMENTARY ZONES ───────────────────────────────────────
 
 async fn zone_places(db: SupabaseClient, filter_type: Option<String>, filter_country: Option<String>, lang: &str) -> Response {
     let ft = filter_type.as_deref().unwrap_or("");
@@ -1157,9 +1378,10 @@ async fn zone_places(db: SupabaseClient, filter_type: Option<String>, filter_cou
     countries.sort();
 
     let type_opts: &[(&str, &str)] = &[
-        ("", "All types"), ("bar", "Bar"), ("leather_bar", "Leather Bar"),
-        ("sauna_bathhouse", "Sauna / Bathhouse"), ("campground", "Campground"),
-        ("party_venue", "Party Venue"),
+        ("", "All types"), ("bar", "Bar"), ("leather-bar", "Leather Bar"),
+        ("sauna-bathhouse", "Sauna / Bathhouse"), ("campground", "Campground"),
+        ("party-venue", "Party Venue"), ("resort", "Resort"),
+        ("hotel", "Hotel"), ("cruise-ship", "Cruise Ship"),
     ];
     let type_sel: String = type_opts.iter().map(|(v, l)| {
         let sel = if *v == ft { " selected" } else { "" };
@@ -1329,43 +1551,205 @@ async fn zone_clubs(db: SupabaseClient, lang: &str) -> Response {
 }
 
 async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
-    let url = format!(
-        "{}/rest/v1/current_title_holders\
-         ?select=title_name,holder_name,year,city,country,competition_scope\
-         &order=title_name.asc",
+    // Fetch competitions with scope/country info
+    let url_comps = format!(
+        "{}/rest/v1/competitions\
+         ?active=eq.true\
+         &select=id,name,scope,country,city,website,founded_year,owning_club_id\
+         &order=scope.asc,name.asc&limit=100",
         db.url
     );
-    let holders: Vec<serde_json::Value> = db.get_json(&url).await.unwrap_or_default();
-    let items: String = holders.iter().map(|h| {
-        let title  = h["title_name"].as_str().unwrap_or("");
-        let holder = h["holder_name"].as_str().unwrap_or("");
-        let year   = h["year"].as_i64().unwrap_or(0);
-        let city   = h["city"].as_str().unwrap_or("");
-        let ctry   = h["country"].as_str().unwrap_or("");
-        let scope  = h["competition_scope"].as_str().unwrap_or("");
-        let icon   = match scope {
-            "continental"=>"🌎","national"=>"🏳️","regional"=>"📍","local"=>"🏙️",_=>"🐻"
+    // Fetch all title holders (historical + current)
+    let url_holders = format!(
+        "{}/rest/v1/title_holders\
+         ?select=competition_id,holder_name,year,city,country,inclusion_flag_codes,holder_status\
+         &order=competition_id.asc,year.desc&limit=500",
+        db.url
+    );
+    // Fetch clubs for linking
+    let url_clubs = format!(
+        "{}/rest/v1/clubs?select=id,name,website&active=eq.true&limit=200",
+        db.url
+    );
+    let (comps_res, holders_res, clubs_res) = tokio::join!(
+        db.get_json::<Vec<serde_json::Value>>(&url_comps),
+        db.get_json::<Vec<serde_json::Value>>(&url_holders),
+        db.get_json::<Vec<serde_json::Value>>(&url_clubs),
+    );
+    let comps   = comps_res.unwrap_or_default();
+    let holders = holders_res.unwrap_or_default();
+    let clubs   = clubs_res.unwrap_or_default();
+
+    // Index clubs by id
+    let club_map: std::collections::HashMap<i64, (&str, &str)> = clubs.iter()
+        .filter_map(|c| {
+            let id   = c["id"].as_i64()?;
+            let name = c["name"].as_str().unwrap_or("");
+            let site = c["website"].as_str().unwrap_or("");
+            Some((id, (name, site)))
+        })
+        .collect();
+
+    // Group holders by competition_id
+    let mut holders_by_comp: std::collections::HashMap<i64, Vec<&serde_json::Value>> = std::collections::HashMap::new();
+    for h in &holders {
+        if let Some(cid) = h["competition_id"].as_i64() {
+            holders_by_comp.entry(cid).or_default().push(h);
+        }
+    }
+
+    // Scope order and icons
+    let scope_order = ["international", "continental", "national", "regional", "local"];
+    let scope_icon  = |s: &str| match s {
+        "international" => "🌍", "continental" => "🌎",
+        "national" => "🏳️",    "regional"      => "📍",
+        "local"    => "🏙️",    _               => "🐻",
+    };
+
+    // Build sections by scope
+    let mut sections = String::new();
+    for scope in scope_order {
+        let scope_comps: Vec<&serde_json::Value> = comps.iter()
+            .filter(|c| c["scope"].as_str().unwrap_or("") == scope)
+            .collect();
+        if scope_comps.is_empty() { continue; }
+
+        let scope_label = match scope {
+            "international" => "International",
+            "continental"   => "Continental",
+            "national"      => "National",
+            "regional"      => "Regional",
+            "local"         => "Local",
+            _               => scope,
         };
-        card(&format!(
-            "<div style=\"display:flex;justify-content:space-between;align-items:center\">\
-              <div>\
-                <div style=\"font-weight:600;font-size:14px\">{icon} {title}</div>\
-                <div style=\"font-size:12px;color:{MID}\">{holder}</div>\
-                <div style=\"font-size:11px;color:{MID}\">{city}{sep}{ctry}</div>\
-              </div>\
-              <div style=\"font-size:22px;font-weight:700;color:{ORANGE}\">{year}</div>\
-            </div>",
-            sep = if !city.is_empty() && !ctry.is_empty() { ", " } else { "" },
-        ))
-    }).collect();
-    let page_titles_title = i18n::t(i18n::translations(), lang, "page.titles.title");
+        sections.push_str(&format!(
+            "<div style=\"font-size:10px;font-weight:700;text-transform:uppercase;\
+              letter-spacing:.1em;color:{MID};margin:16px 0 6px\">{scope_label}</div>"
+        ));
+
+        for comp in scope_comps {
+            let cid     = comp["id"].as_i64().unwrap_or(0);
+            let cname   = comp["name"].as_str().unwrap_or("");
+            let ccountry = comp["country"].as_str().unwrap_or("");
+            let ccity   = comp["city"].as_str().unwrap_or("");
+            let csite   = comp["website"].as_str().unwrap_or("#");
+            let cfounded = comp["founded_year"].as_i64().unwrap_or(0);
+            let club_id = comp["owning_club_id"].as_i64().unwrap_or(0);
+            let icon    = scope_icon(scope);
+
+            let site_btn = if !csite.is_empty() && csite != "#" {
+                format!("<a href=\"{csite}\" target=\"_blank\" rel=\"noopener\" \
+                          style=\"font-size:10px;color:{ORANGE};text-decoration:none;\
+                                  border:1px solid {ORANGE};border-radius:8px;\
+                                  padding:2px 8px;white-space:nowrap\">Site</a>")
+            } else { String::new() };
+
+            let club_btn = if club_id > 0 {
+                if let Some((cln, cls)) = club_map.get(&club_id) {
+                    if !cls.is_empty() && *cls != "#" {
+                        format!("<a href=\"{cls}\" target=\"_blank\" rel=\"noopener\" \
+                                  style=\"font-size:10px;color:{BROWN};text-decoration:none;\
+                                          border:1px solid {TAN};border-radius:8px;\
+                                          padding:2px 8px;white-space:nowrap\">{cln}</a>")
+                    } else {
+                        format!("<span style=\"font-size:10px;color:{MID}\">{cln}</span>")
+                    }
+                } else { String::new() }
+            } else { String::new() };
+
+            let meta = {
+                let mut parts = vec![];
+                if !ccity.is_empty() { parts.push(ccity.to_string()); }
+                if !ccountry.is_empty() { parts.push(ccountry.to_string()); }
+                if cfounded > 0 { parts.push(format!("est. {cfounded}")); }
+                parts.join(" · ")
+            };
+
+            // Titleholders sublist
+            let comp_holders = holders_by_comp.get(&cid)
+                .map(|v| v.as_slice())
+                .unwrap_or(&[]);
+
+            let holder_rows: String = comp_holders.iter().take(12).map(|h| {
+                let name   = h["holder_name"].as_str().unwrap_or("");
+                let year   = h["year"].as_i64().unwrap_or(0);
+                let hcity  = h["city"].as_str().unwrap_or("");
+                let hctry  = h["country"].as_str().unwrap_or("");
+                let status = h["holder_status"].as_str().unwrap_or("");
+                let fs: Vec<String> = h["inclusion_flag_codes"].as_array()
+                    .map(|v| v.iter().filter_map(|s| s.as_str().map(String::from)).collect())
+                    .unwrap_or_default();
+                let loc = match (hcity, hctry) {
+                    (c, ct) if !c.is_empty() && !ct.is_empty() => format!("{c}, {ct}"),
+                    (c, _) if !c.is_empty() => c.to_string(),
+                    (_, ct) if !ct.is_empty() => ct.to_string(),
+                    _ => String::new(),
+                };
+                let status_badge = match status {
+                    "current"  => format!("<span style=\"font-size:9px;background:{ORANGE};\
+                                            color:#fff;border-radius:6px;padding:1px 5px\">current</span> "),
+                    "holdover" => format!("<span style=\"font-size:9px;background:{GOLD};\
+                                            color:{DARK};border-radius:6px;padding:1px 5px\">holdover</span> "),
+                    _ => String::new(),
+                };
+                format!(
+                    "<div style=\"display:flex;justify-content:space-between;\
+                                  align-items:center;padding:5px 0;\
+                                  border-bottom:1px solid {OFF_WHITE}\">\
+                      <div>\
+                        <span style=\"font-size:13px;font-weight:500\">{status_badge}{name}</span>\
+                        {loc_h}\
+                        {fhtml}\
+                      </div>\
+                      <div style=\"font-size:16px;font-weight:700;color:{TAN};flex-shrink:0\">{yr}</div>\
+                    </div>",
+                    loc_h = if !loc.is_empty() {
+                        format!("<div style=\"font-size:11px;color:{MID}\">{loc}</div>")
+                    } else { String::new() },
+                    fhtml = if !fs.is_empty() {
+                        format!("<div style=\"margin-top:2px\">{}</div>", flags(&fs))
+                    } else { String::new() },
+                    yr = if year > 0 { year.to_string() } else { String::new() },
+                )
+            }).collect();
+
+            let more_note = if comp_holders.len() > 12 {
+                format!("<div style=\"font-size:11px;color:{MID};padding:4px 0\">+ {} more holders in archive</div>",
+                    comp_holders.len() - 12)
+            } else { String::new() };
+
+            sections.push_str(&card(&format!(
+                "<div>\
+                  <div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:8px\">\
+                    <div style=\"flex:1\">\
+                      <div style=\"font-weight:700;font-size:15px\">{icon} {cname}</div>\
+                      <div style=\"font-size:11px;color:{MID};margin-top:2px\">{meta}</div>\
+                    </div>\
+                    <div style=\"display:flex;flex-direction:column;gap:4px;align-items:flex-end\">\
+                      {site_btn}{club_btn}\
+                    </div>\
+                  </div>\
+                  {holders_h}\
+                </div>",
+                holders_h = if !holder_rows.is_empty() {
+                    format!("<div style=\"margin-top:10px\">{holder_rows}{more_note}</div>")
+                } else {
+                    format!("<div style=\"font-size:11px;color:{MID};margin-top:6px;\
+                              font-style:italic\">No recorded titleholders yet.</div>")
+                },
+            )));
+        }
+    }
+
     let body = format!(
-        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Title Holders</h1>\
-        <p style=\"font-size:12px;color:{MID};margin-bottom:16px\">87 records · IBR complete 1992–2011.</p>\
-        {items}"
+        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Bear Title Holders</h1>\
+        <p style=\"font-size:12px;color:{MID};margin-bottom:8px\">\
+          Competitions and their titleholders. IBR complete 1992–2011.</p>\
+        {sections}"
     );
     Html(shell("Titles", "Bear title holders worldwide.", "archive", &body, lang)).into_response()
 }
+
 async fn zone_creators(db: SupabaseClient, lang: &str) -> Response {
     // Fetch creators, their media, and stores in parallel
     let url_creators = format!(
@@ -1705,7 +2089,7 @@ async fn zone_digital(db: SupabaseClient, lang: &str) -> Response {
 // These delegate to zone functions. Remove once Gaspar confirms ?zone= routing.
 
 pub async fn now_page           (State(db): State<SupabaseClient>) -> Response { zone_now(db, None, None, "en").await }
-pub async fn coming_up_page     (State(db): State<SupabaseClient>) -> Response { zone_coming_up(db, None, None, "en").await }
+pub async fn coming_up_page     (State(db): State<SupabaseClient>) -> Response { zone_coming_up(db, None, None, None, "en").await }
 pub async fn history_page       (State(db): State<SupabaseClient>) -> Response { zone_archive(db, None, None, "en").await }
 pub async fn bear_future_page   (State(db): State<SupabaseClient>) -> Response { zone_future(db, "en").await }
 pub async fn events_page        (State(db): State<SupabaseClient>) -> Response { zone_events(db, None, "en").await }
