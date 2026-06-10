@@ -37,6 +37,7 @@ use axum::{
     response::{Html, IntoResponse, Response},
 };
 use crate::db::SupabaseClient;
+use crate::i18n;
 use serde::Deserialize;
 
 // ── Query params ──────────────────────────────────────────────
@@ -49,6 +50,7 @@ pub struct ZoneQuery {
     pub fragment:     Option<String>,  // "events" → return bare #event-list HTML for HTMX
     pub place_type:    Option<String>,
     pub place_country: Option<String>,
+    pub lang:         Option<String>,
 }
 
 // ── Design system (Variant G) ─────────────────────────────────
@@ -63,11 +65,33 @@ const MID:       &str = "#777777";
 
 // ── Shell ─────────────────────────────────────────────────────
 
-fn shell(title: &str, description: &str, active: &str, body: &str) -> String {
-    let nav = |zone: &str, icon: &str, label: &str| {
-        let on = zone == active;
+fn shell(title: &str, description: &str, active: &str, body: &str, lang: &str) -> String {
+    let i18n = i18n::translations();
+    let tl = |key: &str| i18n::t(i18n, lang, key);
+
+    // Language switcher: links preserve zone, swap lang param
+    let lang_switcher = {
+        let langs = [("en", "EN"), ("es", "ES"), ("fr", "FR")];
+        langs.iter().map(|(code, label)| {
+            let active_style = if *code == lang {
+                format!("background:{BROWN};color:#fff")
+            } else {
+                format!("background:transparent;color:{MID}")
+            };
+            format!(
+                "<a href=\"/?zone={active}&lang={code}\" \
+                   style=\"font-size:10px;font-weight:700;padding:3px 7px;\
+                           border-radius:999px;text-decoration:none;{active_style}\">{label}</a>",
+            )
+        }).collect::<Vec<_>>().join("")
+    };
+
+    let nav = |zone: &str, icon: &str, key: &str| {
+        let on    = zone == active;
+        let label = tl(key);
         format!(
-            "<a href=\"/?zone={zone}\" style=\"display:flex;flex-direction:column;\
+            "<a href=\"/?zone={zone}&lang={lang}\" \
+               style=\"display:flex;flex-direction:column;\
                align-items:center;gap:2px;text-decoration:none;padding:4px 8px;\
                border-radius:10px;color:{col};font-weight:{fw};font-size:10px\"\
                ><span style=\"font-size:20px;line-height:1\">{icon}</span>{label}</a>",
@@ -75,9 +99,10 @@ fn shell(title: &str, description: &str, active: &str, body: &str) -> String {
             fw  = if on { "700" } else { "400" },
         )
     };
+    let _ = tl; // suppress unused warning if no keys used in body
     format!(
         "<!DOCTYPE html>\n\
-<html lang=\"en\">\n\
+<html lang=\"{lang}\">\n\
 <head>\n\
   <meta charset=\"UTF-8\">\n\
   <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n\
@@ -137,15 +162,23 @@ fn shell(title: &str, description: &str, active: &str, body: &str) -> String {
 \n\
   <div class=\"stripe\"></div>\n\
 \n\
-  <header style=\"max-width:640px;margin:0 auto;padding:14px 16px 8px;\n\
-                 display:flex;justify-content:space-between;align-items:center\">\n\
-    <a href=\"/?zone=now\" style=\"display:flex;align-items:baseline;gap:8px\">\n\
-      <span style=\"font-size:18px;font-weight:700;letter-spacing:.15em;color:{BROWN}\">BEARINGS</span>\n\
-      <span style=\"font-size:11px;color:{MID}\">global bear community</span>\n\
-    </a>\n\
-    <a href=\"/api/events/ical.ics\"\n\
-       style=\"font-size:11px;background:{GOLD};color:{DARK};border-radius:999px;\n\
-              padding:5px 12px;font-weight:600\">📅 iCal</a>\n\
+  <header style=\"max-width:640px;margin:0 auto;padding:10px 16px 8px\">\n\
+    <div style=\"display:flex;justify-content:space-between;align-items:center\">\n\
+      <a href=\"/?zone=now&lang={lang}\" \
+style=\"display:flex;align-items:baseline;gap:8px\">\n\
+        <span style=\"font-size:18px;font-weight:700;\
+letter-spacing:.15em;color:{BROWN}\">BEARINGS</span>\n\
+        <span style=\"font-size:11px;color:{MID}\">global bear community</span>\n\
+      </a>\n\
+      <div style=\"display:flex;align-items:center;gap:8px\">\n\
+        <div style=\"display:flex;gap:3px;border:1px solid {TAN};\
+border-radius:999px;padding:2px\">{lang_switcher}</div>\n\
+        <a href=\"/api/events/ical.ics\"\n\
+           style=\"font-size:11px;background:{GOLD};color:{DARK};\
+border-radius:999px;\n\
+                  padding:5px 12px;font-weight:600\">📅 iCal</a>\n\
+      </div>\n\
+    </div>\n\
   </header>\n\
 \n\
   <main style=\"max-width:640px;margin:0 auto;padding:4px 16px 16px\">\n\
@@ -162,15 +195,14 @@ fn shell(title: &str, description: &str, active: &str, body: &str) -> String {
 \n\
 </body>\n\
 </html>",
-        n_now     = nav("now",       "🐻", "NOW"),
-        n_coming  = nav("coming-up", "📍", "TRIPS"),
-        n_archive  = nav("archive",        "📚", "ARCHIVE"),
-        n_digital  = nav("digital-spaces", "📱", "ONLINE"),
-        n_future  = nav("future",    "🏛️","FUTURE"),
-        n_places  = nav("places",    "🍺", "PLACES"),
+        n_now     = nav("now",           "🐻", "nav.events"),
+        n_coming  = nav("coming-up",     "📍", "nav.timeline"),
+        n_archive = nav("archive",       "📚", "nav.archive"),
+        n_digital = nav("digital-spaces","📱", "nav.digital"),
+        n_future  = nav("future",        "🏛\u{fe0f}", "nav.history"),
+        n_places  = nav("places",        "🍺", "nav.places"),
     )
 }
-
 fn card(c: &str) -> String {
     format!("<div class=\"card\">{c}</div>")
 }
@@ -275,24 +307,26 @@ pub async fn root(
     State(db): State<SupabaseClient>,
     Query(q): Query<ZoneQuery>,
 ) -> Response {
+    let lang_owned = match q.lang.as_deref() { Some("es") => "es", Some("fr") => "fr", _ => "en" };
     match q.zone.as_deref().unwrap_or("now") {
-        "coming-up"      => zone_coming_up(db).await,
-        "archive"        => zone_archive(db, q.decade, q.fragment.clone()).await,
-        "future"         => zone_future(db).await,
-        "places"         => zone_places(db, q.place_type.clone(), q.place_country.clone()).await,
-        "events"         => zone_events(db, q.month).await,
-        "clubs"          => zone_clubs(db).await,
-        "titles"         => zone_titles(db).await,
-        "creators"       => zone_creators(db).await,
-        "campaigns"      => zone_campaigns(db).await,
-        "digital-spaces" => zone_digital(db).await,
-        _                => zone_now(db, q.month, q.fragment).await,
+        "now"            => zone_now(db, q.month, q.fragment.clone(), lang_owned).await,
+        "coming-up"      => zone_coming_up(db, lang_owned).await,
+        "archive"        => zone_archive(db, q.decade, q.fragment.clone(), lang_owned).await,
+        "future"         => zone_future(db, lang_owned).await,
+        "places"         => zone_places(db, q.place_type.clone(), q.place_country.clone(), lang_owned).await,
+        "events"         => zone_events(db, q.month, lang_owned).await,
+        "clubs"          => zone_clubs(db, lang_owned).await,
+        "titles"         => zone_titles(db, lang_owned).await,
+        "creators"       => zone_creators(db, lang_owned).await,
+        "campaigns"      => zone_campaigns(db, lang_owned).await,
+        "digital-spaces" => zone_digital(db, lang_owned).await,
+        _                => zone_now(db, None, None, lang_owned).await,
     }
 }
 
 // ── ZONE: NOW ─────────────────────────────────────────────────
 
-async fn zone_now(db: SupabaseClient, month_filter: Option<u32>, fragment: Option<String>) -> Response {
+async fn zone_now(db: SupabaseClient, month_filter: Option<u32>, fragment: Option<String>, lang: &str) -> Response {
     let rpc_body = serde_json::json!({
         "input_lat": serde_json::Value::Null,
         "input_lng": serde_json::Value::Null,
@@ -552,12 +586,12 @@ async fn zone_now(db: SupabaseClient, month_filter: Option<u32>, fragment: Optio
         h_titles = sh("Current Title Holders", Some(ttls.len())),
     );
 
-    Html(shell("Now", "What the bear world is doing right now.", "now", &body)).into_response()
+    Html(shell("Now", "What the bear world is doing right now.", "now", &body, lang)).into_response()
 }
 
 // ── ZONE: COMING UP ───────────────────────────────────────────
 
-async fn zone_coming_up(db: SupabaseClient) -> Response {
+async fn zone_coming_up(db: SupabaseClient, lang: &str) -> Response {
     let rpc_body = serde_json::json!({
         "input_lat": serde_json::Value::Null, "input_lng": serde_json::Value::Null,
         "radius_km": serde_json::Value::Null, "season": serde_json::Value::Null,
@@ -688,12 +722,12 @@ async fn zone_coming_up(db: SupabaseClient) -> Response {
         h_ev = sh("Upcoming Events", Some(events.len())),
         h_vn = sh("Venues in Destination", Some(venues.len())),
     );
-    Html(shell("Coming Up", "Plan your bear trips.", "coming-up", &body)).into_response()
+    Html(shell("Coming Up", "Plan your bear trips.", "coming-up", &body, lang)).into_response()
 }
 
 // ── ZONE: BEAR ARCHIVES (decade tabs) ────────────────────────
 
-async fn zone_archive(db: SupabaseClient, decade: Option<String>, fragment: Option<String>) -> Response {
+async fn zone_archive(db: SupabaseClient, decade: Option<String>, fragment: Option<String>, lang: &str) -> Response {
     let url = format!(
         "{}/rest/v1/bear_history?active=eq.true\
          &select=year,title,description,category,significance\
@@ -774,8 +808,8 @@ async fn zone_archive(db: SupabaseClient, decade: Option<String>, fragment: Opti
             .filter(|h| h["year"].as_i64().map(|y| y >= ds && y < ds+10).unwrap_or(false))
             .count();
         format!(
-            "<a href=\"/?zone=archive&decade={d}\"\
-               hx-get=\"/?zone=archive&decade={d}&fragment=tl\"\
+            "<a href=\"/?zone=archive&decade={d}&lang={lang}\"\
+               hx-get=\"/?zone=archive&decade={d}&fragment=tl&lang={lang}\"\
                hx-target=\"#archive-tl\" hx-swap=\"outerHTML\"\
                hx-indicator=\"#archive-spin\"\
                class=\"dtab {cls}\">{d} <span style=\"font-size:10px;opacity:.7\">({count})</span></a>",
@@ -815,8 +849,9 @@ async fn zone_archive(db: SupabaseClient, decade: Option<String>, fragment: Opti
         ))
     }).collect();
 
+    let page_archive_title = i18n::t(i18n::translations(), lang, "page.history.title");
     let body = format!(
-        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Bear Archives</h1>\
+        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">{page_archive_title}</h1>\
         <p style=\"font-size:12px;color:{MID};margin-bottom:16px\">\
           Community history from 1987 to present — {n} milestones documented.</p>\
         <div style=\"display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px\">{tabs}</div>\
@@ -838,7 +873,7 @@ async fn zone_archive(db: SupabaseClient, decade: Option<String>, fragment: Opti
         h_voices   = sh("Voices — Oral Histories &amp; Scholarship", Some(stories.len())),
         story_cards = story_cards,
     );
-    Html(shell("Bear Archives", "Community history 1987 to present.", "archive", &body)).into_response()
+    Html(shell("Bear Archives", "Community history 1987 to present.", "archive", &body, lang)).into_response()
 }
 
 fn build_timeline(entries: &[&serde_json::Value]) -> String {
@@ -898,7 +933,7 @@ fn build_timeline(entries: &[&serde_json::Value]) -> String {
 }
 // ── ZONE: BEAR FUTURE ─────────────────────────────────────────
 
-async fn zone_future(db: SupabaseClient) -> Response {
+async fn zone_future(db: SupabaseClient, lang: &str) -> Response {
     // Load community proposals (reframed as ideas, no crypto required)
     let p_url = format!(
         "{}/rest/v1/bear_future_proposals?active=eq.true&order=created_at.desc&limit=10",
@@ -956,8 +991,9 @@ async fn zone_future(db: SupabaseClient) -> Response {
         </div>"
     );
 
+    let page_future_title = i18n::t(i18n::translations(), lang, "page.history.title");
     let body = format!(
-        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Bear Future</h1>\
+        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">{page_future_title}</h1>\
         <p style=\"font-size:12px;color:{MID};margin-bottom:16px\">\
           Where the community decides what comes next.</p>\
         {vision_card}\
@@ -966,12 +1002,12 @@ async fn zone_future(db: SupabaseClient) -> Response {
         {contact_card}",
         h_props = sh("Community Ideas", Some(proposals.len())),
     );
-    Html(shell("Bear Future", "Community direction and proposals.", "future", &body)).into_response()
+    Html(shell("Bear Future", "Community direction and proposals.", "future", &body, lang)).into_response()
 }
 
 // ── SUPPLEMENTARY ZONES ───────────────────────────────────────
 
-async fn zone_places(db: SupabaseClient, filter_type: Option<String>, filter_country: Option<String>) -> Response {
+async fn zone_places(db: SupabaseClient, filter_type: Option<String>, filter_country: Option<String>, lang: &str) -> Response {
     let ft = filter_type.as_deref().unwrap_or("");
     let fc = filter_country.as_deref().unwrap_or("");
     let tc = if !ft.is_empty() { format!("&place_type=eq.{ft}") } else { String::new() };
@@ -1015,6 +1051,7 @@ async fn zone_places(db: SupabaseClient, filter_type: Option<String>, filter_cou
         "<form method=\"get\" action=\"/\" \
                style=\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px\">\
           <input type=\"hidden\" name=\"zone\" value=\"places\">\
+          <input type=\"hidden\" name=\"lang\" value=\"{lang}\">\
           <select name=\"place_type\" onchange=\"this.form.submit()\" style=\"{sel_style}\">\
             {type_sel}</select>\
           <select name=\"place_country\" onchange=\"this.form.submit()\" style=\"{sel_style}\">\
@@ -1070,13 +1107,14 @@ async fn zone_places(db: SupabaseClient, filter_type: Option<String>, filter_cou
             fhtml    = flags(&fs),
         ))
     }).collect();
+    let page_places_title = i18n::t(i18n::translations(), lang, "page.places.title");
     let body = format!(
         "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:8px\">Bear Venues</h1>{filter_bar}{items}"
     );
-    Html(shell("Places", "Bear bars, saunas, campgrounds worldwide.", "places", &body)).into_response()
+    Html(shell("Places", "Bear bars, saunas, campgrounds worldwide.", "places", &body, lang)).into_response()
 }
 
-async fn zone_events(db: SupabaseClient, month: Option<u32>) -> Response {
+async fn zone_events(db: SupabaseClient, month: Option<u32>, lang: &str) -> Response {
     let url = format!(
         "{}/rest/v1/events?active=eq.true&status=neq.past\
          &select=name,city,country,start_date,end_date,type,hot,link,inclusion_flag_codes\
@@ -1118,10 +1156,10 @@ async fn zone_events(db: SupabaseClient, month: Option<u32>) -> Response {
           <a href=\"/api/events/ical.ics\" class=\"btn-g\">📅 Subscribe</a>\
         </div>{items}"
     );
-    Html(shell("Events", "Bear events worldwide.", "now", &body)).into_response()
+    Html(shell("Events", "Bear events worldwide.", "now", &body, lang)).into_response()
 }
 
-async fn zone_clubs(db: SupabaseClient) -> Response {
+async fn zone_clubs(db: SupabaseClient, lang: &str) -> Response {
     let url = format!(
         "{}/rest/v1/clubs?active=eq.true\
          &select=name,city,country,club_type,description,website,founded_year\
@@ -1154,13 +1192,14 @@ async fn zone_clubs(db: SupabaseClient) -> Response {
             } else { String::new() },
         ))
     }).collect();
+    let page_clubs_title = i18n::t(i18n::translations(), lang, "page.clubs.title");
     let body = format!(
-        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:16px\">Bear Clubs</h1>{items}"
+        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:16px\">{page_clubs_title}</h1>{items}"
     );
-    Html(shell("Clubs", "Bear clubs worldwide.", "archive", &body)).into_response()
+    Html(shell("Clubs", "Bear clubs worldwide.", "archive", &body, lang)).into_response()
 }
 
-async fn zone_titles(db: SupabaseClient) -> Response {
+async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
     let url = format!(
         "{}/rest/v1/current_title_holders\
          ?select=title_name,holder_name,year,city,country,competition_scope\
@@ -1190,14 +1229,15 @@ async fn zone_titles(db: SupabaseClient) -> Response {
             sep = if !city.is_empty() && !ctry.is_empty() { ", " } else { "" },
         ))
     }).collect();
+    let page_titles_title = i18n::t(i18n::translations(), lang, "page.titles.title");
     let body = format!(
         "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Title Holders</h1>\
         <p style=\"font-size:12px;color:{MID};margin-bottom:16px\">87 records · IBR complete 1992–2011.</p>\
         {items}"
     );
-    Html(shell("Titles", "Bear title holders worldwide.", "archive", &body)).into_response()
+    Html(shell("Titles", "Bear title holders worldwide.", "archive", &body, lang)).into_response()
 }
-async fn zone_creators(db: SupabaseClient) -> Response {
+async fn zone_creators(db: SupabaseClient, lang: &str) -> Response {
     // Fetch creators, their media, and stores in parallel
     let url_creators = format!(
         "{}/rest/v1/creators?active=eq.true\
@@ -1412,10 +1452,11 @@ async fn zone_creators(db: SupabaseClient) -> Response {
         "Bear community creators and shops.",
         "creators",
         &body,
+        lang,
     )).into_response()
 }
 
-async fn zone_campaigns(db: SupabaseClient) -> Response {
+async fn zone_campaigns(db: SupabaseClient, lang: &str) -> Response {
     let url = format!(
         "{}/rest/v1/campaigns?active=eq.true&privacy_mode=eq.false\
          &select=name,org,description,link,goal,raised,currency&order=name.asc",
@@ -1468,13 +1509,14 @@ async fn zone_campaigns(db: SupabaseClient) -> Response {
             } else { String::new() },
         ))
     }).collect();
+    let page_campaigns_title = i18n::t(i18n::translations(), lang, "page.campaigns.title");
     let body = format!(
-        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:16px\">Community Campaigns</h1>{items}"
+        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:16px\">{page_campaigns_title}</h1>{items}"
     );
-    Html(shell("Campaigns", "Community campaigns.", "now", &body)).into_response()
+    Html(shell("Campaigns", "Community campaigns.", "now", &body, lang)).into_response()
 }
 
-async fn zone_digital(db: SupabaseClient) -> Response {
+async fn zone_digital(db: SupabaseClient, lang: &str) -> Response {
     let url = format!(
         "{}/rest/v1/digital_spaces?active=eq.true\
          &select=name,space_type,description,url,member_count,\
@@ -1523,23 +1565,24 @@ async fn zone_digital(db: SupabaseClient) -> Response {
             sc_html = sc.join(" "),
         ))
     }).collect();
+    let page_digital_title = i18n::t(i18n::translations(), lang, "page.digital.title");
     let body = format!(
-        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:16px\">Digital Spaces</h1>{items}"
+        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:16px\">{page_digital_title}</h1>{items}"
     );
-    Html(shell("Digital Spaces", "Bear digital spaces.", "now", &body)).into_response()
+    Html(shell("Digital Spaces", "Bear digital spaces.", "now", &body, lang)).into_response()
 }
 
 // ── LEGACY WRAPPERS (kept so existing routes in main.rs still compile) ──────
 // These delegate to zone functions. Remove once Gaspar confirms ?zone= routing.
 
-pub async fn now_page           (State(db): State<SupabaseClient>) -> Response { zone_now(db, None, None).await }
-pub async fn coming_up_page     (State(db): State<SupabaseClient>) -> Response { zone_coming_up(db).await }
-pub async fn history_page       (State(db): State<SupabaseClient>) -> Response { zone_archive(db, None, None).await }
-pub async fn bear_future_page   (State(db): State<SupabaseClient>) -> Response { zone_future(db).await }
-pub async fn events_page        (State(db): State<SupabaseClient>) -> Response { zone_events(db, None).await }
-pub async fn places_page        (State(db): State<SupabaseClient>) -> Response { zone_places(db, None, None).await }
-pub async fn clubs_page         (State(db): State<SupabaseClient>) -> Response { zone_clubs(db).await }
-pub async fn titles_page        (State(db): State<SupabaseClient>) -> Response { zone_titles(db).await }
-pub async fn creators_page      (State(db): State<SupabaseClient>) -> Response { zone_creators(db).await }
-pub async fn campaigns_page     (State(db): State<SupabaseClient>) -> Response { zone_campaigns(db).await }
-pub async fn digital_spaces_page(State(db): State<SupabaseClient>) -> Response { zone_digital(db).await }
+pub async fn now_page           (State(db): State<SupabaseClient>) -> Response { zone_now(db, None, None, "en").await }
+pub async fn coming_up_page     (State(db): State<SupabaseClient>) -> Response { zone_coming_up(db, "en").await }
+pub async fn history_page       (State(db): State<SupabaseClient>) -> Response { zone_archive(db, None, None, "en").await }
+pub async fn bear_future_page   (State(db): State<SupabaseClient>) -> Response { zone_future(db, "en").await }
+pub async fn events_page        (State(db): State<SupabaseClient>) -> Response { zone_events(db, None, "en").await }
+pub async fn places_page        (State(db): State<SupabaseClient>) -> Response { zone_places(db, None, None, "en").await }
+pub async fn clubs_page         (State(db): State<SupabaseClient>) -> Response { zone_clubs(db, "en").await }
+pub async fn titles_page        (State(db): State<SupabaseClient>) -> Response { zone_titles(db, "en").await }
+pub async fn creators_page      (State(db): State<SupabaseClient>) -> Response { zone_creators(db, "en").await }
+pub async fn campaigns_page     (State(db): State<SupabaseClient>) -> Response { zone_campaigns(db, "en").await }
+pub async fn digital_spaces_page(State(db): State<SupabaseClient>) -> Response { zone_digital(db, "en").await }

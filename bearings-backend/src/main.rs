@@ -78,6 +78,7 @@ mod db;
 mod error;
 mod middleware;
 mod routes;
+mod i18n;
 mod ssr;
 mod llms;
 
