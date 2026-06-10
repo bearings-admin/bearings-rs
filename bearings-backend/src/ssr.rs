@@ -268,6 +268,21 @@ fn card(c: &str) -> String {
     format!("<div class=\"card\">{c}</div>")
 }
 
+fn country_region(country: &str) -> &'static str {
+    match country {
+        "Canada"|"USA"|"Mexico"|"Puerto Rico" => "North America",
+        "Belgium"|"Czech Republic"|"Czechia"|"Estonia"|"France"|"Germany"|
+        "Iceland"|"Ireland"|"Italy"|"Luxembourg"|"Netherlands"|"Norway"|
+        "Poland"|"Portugal"|"Scotland"|"Spain"|"Sweden"|"Switzerland"|"UK" => "Europe",
+        "Australia"|"Japan"|"Malaysia"|"New Zealand"|"Philippines"|
+        "Singapore"|"South Korea"|"Taiwan"|"Thailand" => "Asia Pacific",
+        "Argentina"|"Brazil"|"Chile"|"Colombia"|"Uruguay" => "Latin America",
+        "Egypt"|"Israel"|"Morocco"|"South Africa"|"UAE" => "Africa & Middle East",
+        _ => "Other",
+    }
+}
+
+
 fn sh(label: &str, n: Option<usize>) -> String {
     let pill = n.map(|x| format!("<span class=\"cp\">{x}</span>")).unwrap_or_default();
     format!("<div class=\"sh\">{label}{pill}</div>")
@@ -441,8 +456,8 @@ async fn zone_now(db: SupabaseClient, lang: &str) -> Response {
     let cmpg   = camps_res.unwrap_or_default();
     let ttls   = titles_res.unwrap_or_default();
 
-    // ── Event cards ───────────────────────────────────────────
-    let event_cards: String = events.iter().map(|ev| {
+    // ── Event cards grouped by region ────────────────────────
+    let make_event_card = |ev: &serde_json::Value| -> String {
         let name   = ev["name"].as_str().unwrap_or("");
         let city   = ev["city"].as_str().unwrap_or("");
         let ctry   = ev["country"].as_str().unwrap_or("");
@@ -478,6 +493,17 @@ async fn zone_now(db: SupabaseClient, lang: &str) -> Response {
             </div>",
             sep   = if !city.is_empty() && !ctry.is_empty() { ", " } else { "" },
             fhtml = flags(&fs),
+        ))
+    };
+    let region_order = ["North America","Europe","Asia Pacific","Latin America","Africa & Middle East","Other"];
+    let event_cards: String = region_order.iter().filter_map(|&region| {
+        let group: Vec<_> = events.iter()
+            .filter(|ev| country_region(ev["country"].as_str().unwrap_or("")) == region)
+            .collect();
+        if group.is_empty() { return None; }
+        let cards: String = group.iter().map(|ev| make_event_card(ev)).collect();
+        Some(format!(
+            "<div style=\"font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:{BROWN};padding:10px 4px 4px\">{region}</div>{cards}"
         ))
     }).collect();
 
@@ -691,8 +717,8 @@ async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>, event_cou
         events.clone()
     };
 
-    // ── Event cards ───────────────────────────────────────────
-    let ev_cards: String = disp_events.iter().map(|ev| {
+    // ── Event cards grouped by region ────────────────────────
+    let make_cu_card = |ev: &serde_json::Value| -> String {
         let name  = ev["name"].as_str().unwrap_or("");
         let city  = ev["city"].as_str().unwrap_or("");
         let ctry  = ev["country"].as_str().unwrap_or("");
@@ -724,7 +750,23 @@ async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>, event_cou
             sep   = if !city.is_empty() && !ctry.is_empty() { ", " } else { "" },
             fhtml = flags(&fs),
         ))
-    }).collect();
+    };
+    let worldwide = event_country.as_deref().map(|c| c.is_empty()).unwrap_or(true);
+    let ev_cards: String = if worldwide {
+        let region_order = ["North America","Europe","Asia Pacific","Latin America","Africa & Middle East","Other"];
+        region_order.iter().filter_map(|&region| {
+            let group: Vec<_> = disp_events.iter()
+                .filter(|ev| country_region(ev["country"].as_str().unwrap_or("")) == region)
+                .collect();
+            if group.is_empty() { return None; }
+            let cards: String = group.iter().map(|ev| make_cu_card(ev)).collect();
+            Some(format!(
+                    "<div style=\"font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:{BROWN};padding:10px 4px 4px\">{region}</div>{cards}"
+            ))
+        }).collect()
+    } else {
+        disp_events.iter().map(|ev| make_cu_card(ev)).collect()
+    };
 
     let empty_html = if disp_events.is_empty() {
         format!(
