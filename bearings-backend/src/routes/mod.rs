@@ -13,6 +13,7 @@ pub mod events;
 pub mod flags;          // CONST-10 — inclusion flags reference + flagged events
 pub mod hello;
 pub mod history;
+pub mod future_ideas;    // BEAR FUTURE — idea upvotes
 pub mod ical;           // COMING UP — RFC 5545 iCal export
 pub mod places;
 pub mod stories;        // BEAR ARCHIVES — oral histories

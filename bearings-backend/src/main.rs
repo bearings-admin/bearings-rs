@@ -176,6 +176,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/bear-future/vote",          post(routes::votes::cast))
         // ── iCal export ─────────────────────────────────────────
         .route("/api/events/ical.ics",           get(routes::ical::export))
+        .route("/api/future-ideas/:id/upvote",   post(routes::future_ideas::upvote))
         // ── Submissions ──────────────────────────────────────────
         .route("/api/submissions",               post(routes::submissions::create))
         // ── AI crawlability ─────────────────────────────────────
