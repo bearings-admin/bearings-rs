@@ -383,7 +383,7 @@ pub async fn root(
 ) -> Response {
     let lang_owned = match q.lang.as_deref() { Some("es") => "es", Some("fr") => "fr", _ => "en" };
     match q.zone.as_deref().unwrap_or("now") {
-        "now"            => zone_now(db, q.month, q.fragment.clone(), lang_owned).await,
+        "now"            => zone_now(db, lang_owned).await,
         "coming-up"      => zone_coming_up(db, q.months_ahead, q.event_country.clone(), q.month, lang_owned).await,
         "archive"        => zone_archive(db, q.decade, q.fragment.clone(), lang_owned).await,
         "future"         => zone_future(db, lang_owned).await,
@@ -401,163 +401,144 @@ pub async fn root(
 
 // ── ZONE: NOW ─────────────────────────────────────────────────
 
-async fn zone_now(db: SupabaseClient, month_filter: Option<u32>, fragment: Option<String>, lang: &str) -> Response {
+async fn zone_now(db: SupabaseClient, lang: &str) -> Response {
+    // Worldwide events starting within the next 30 days
+    let today   = Utc::now().date_naive();
+    let in_30   = today.checked_add_days(chrono::Days::new(30)).unwrap_or(today);
+    let from_s  = today.format("%Y-%m-%d").to_string();
+    let to_s    = in_30.format("%Y-%m-%d").to_string();
+
+    let events_url = format!(
+        "{}/rest/v1/events\
+         ?active=eq.true\
+         &start_date=gte.{from_s}\
+         &start_date=lte.{to_s}\
+         &select=id,name,city,country,start_date,end_date,type,hot,link,description,\
+                 event_mode,inclusion_flag_codes\
+         &order=start_date.asc\
+         &limit=40",
+        db.url
+    );
+
+    // Campaigns and titles from now_feed (no lat/lng proximity needed)
     let rpc_body = serde_json::json!({
         "input_lat": serde_json::Value::Null,
         "input_lng": serde_json::Value::Null,
-        "radius_km": 2000.0,
+        "radius_km": serde_json::Value::Null,
     });
-    let data: serde_json::Value = match db.post_rpc("now_feed", &rpc_body).await {
-        Ok(v) => v,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "now_feed failed").into_response(),
-    };
-    let hot  = data["hot_events"].as_array().cloned().unwrap_or_default();
-    let near = data["nearby_venues"].as_array().cloned().unwrap_or_default();
-    let cmpg = data["active_campaigns"].as_array().cloned().unwrap_or_default();
-    let ttls = data["current_titles"].as_array().cloned().unwrap_or_default();
 
-    let all_url = format!(
-        "{}/rest/v1/events?active=eq.true&status=neq.past&select=start_date&limit=200",
-        db.url
+    let (events_res, feed_res) = tokio::join!(
+        db.get_json::<Vec<serde_json::Value>>(&events_url),
+        db.post_rpc("now_feed", &rpc_body),
     );
-    let all_evs: Vec<serde_json::Value> = db.get_json(&all_url).await.unwrap_or_default();
 
-    // Hero card
-    let hero = hot.first().map(|ev| {
-        let name  = ev["name"].as_str().unwrap_or("Upcoming Bear Event");
-        let city  = ev["city"].as_str().unwrap_or("");
-        let ctry  = ev["country"].as_str().unwrap_or("");
-        let start = ev["start_date"].as_str().unwrap_or("");
-        let end   = ev["end_date"].as_str().unwrap_or("");
-        let link  = ev["link"].as_str().unwrap_or("");
-        let desc  = ev["description"].as_str().unwrap_or("");
-        let km    = ev["distance_km"].as_f64().unwrap_or(0.0);
-        let fs    = ev_flags(ev);
-        let dates = if !end.is_empty() && end != start {
+    let events = events_res.unwrap_or_default();
+    let feed: serde_json::Value = feed_res.unwrap_or(serde_json::Value::Object(Default::default()));
+    let cmpg   = feed["active_campaigns"].as_array().cloned().unwrap_or_default();
+    let ttls   = feed["current_titles"].as_array().cloned().unwrap_or_default();
+
+    // ── Event cards ───────────────────────────────────────────
+    let event_cards: String = events.iter().map(|ev| {
+        let name   = ev["name"].as_str().unwrap_or("");
+        let city   = ev["city"].as_str().unwrap_or("");
+        let ctry   = ev["country"].as_str().unwrap_or("");
+        let start  = ev["start_date"].as_str().unwrap_or("");
+        let end    = ev["end_date"].as_str().unwrap_or("");
+        let link   = ev["link"].as_str().unwrap_or("");
+        let etype  = ev["type"].as_str().unwrap_or("");
+        let hot    = ev["hot"].as_bool().unwrap_or(false);
+        let fs     = ev_flags(ev);
+        let dates  = if !end.is_empty() && end != start {
             format!("{start} → {end}")
         } else { start.to_string() };
         let link_html = if !link.is_empty() && link != "#" {
-            format!("<a href=\"{link}\" target=\"_blank\" rel=\"noopener\" class=\"btn-g\">Learn more →</a>")
-        } else { String::new() };
-        format!(
-            "<div style=\"border-radius:20px;padding:20px 18px;margin-bottom:12px;\
-                color:#fff;position:relative;overflow:hidden;\
-                background:linear-gradient(135deg,{BROWN},{ORANGE});\
-                box-shadow:0 4px 20px rgba(92,64,51,.3)\">\
-              <div style=\"position:absolute;top:14px;right:16px;font-size:26px\">🐻</div>\
-              <div style=\"font-size:10px;font-weight:700;letter-spacing:.12em;\
-                          text-transform:uppercase;opacity:.7;margin-bottom:4px\">Up Next 🔥</div>\
-              <h1 style=\"font-size:19px;font-weight:700;margin-bottom:4px;\
-                         line-height:1.3;padding-right:36px\">{name}</h1>\
-              <div style=\"font-size:13px;opacity:.9;margin-bottom:6px\">{city}, {ctry} · {dates}</div>\
-              <div style=\"font-size:12px;opacity:.8;margin-bottom:12px;line-height:1.5\">{snippet}</div>\
-              <div style=\"display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px\">{flags_html}{dist_html}</div>\
-              {link_html}\
-            </div>",
-            snippet   = desc.chars().take(160).collect::<String>(),
-            flags_html= flags(&fs),
-            dist_html = if km > 0.0 { dist(km) } else { String::new() },
-        )
-    }).unwrap_or_default();
-
-    // Filter events by month if selected
-    let displayed: Vec<&serde_json::Value> = if let Some(mn) = month_filter {
-        hot.iter().filter(|e| {
-            e["start_date"].as_str()
-                .and_then(|d| extract_month(d))
-                == Some(mn)
-        }).collect()
-    } else {
-        hot.iter().collect()
-    };
-
-    let event_cards: String = displayed.iter().skip(1).take(9).map(|ev| {
-        let name  = ev["name"].as_str().unwrap_or("");
-        let city  = ev["city"].as_str().unwrap_or("");
-        let ctry  = ev["country"].as_str().unwrap_or("");
-        let start = ev["start_date"].as_str().unwrap_or("");
-        let link  = ev["link"].as_str().unwrap_or("");
-        let etype = ev["type"].as_str().unwrap_or("");
-        let km    = ev["distance_km"].as_f64().unwrap_or(0.0);
-        let fs    = ev_flags(ev);
-        let link_html = if !link.is_empty() && link != "#" {
             format!("<a href=\"{link}\" target=\"_blank\" rel=\"noopener\" class=\"btn-o\">Info</a>")
+        } else { String::new() };
+        let hot_badge = if hot {
+            format!("<span style=\"font-size:9px;background:{ORANGE};color:#fff;\
+                      border-radius:6px;padding:1px 5px;margin-right:4px\">🔥 hot</span>")
         } else { String::new() };
         card(&format!(
             "<div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:10px\">\
               <div style=\"flex:1;min-width:0\">\
-                <div style=\"font-weight:600;font-size:14px;line-height:1.3\">{name} 🔥</div>\
-                <div style=\"font-size:12px;color:{MID};margin-top:2px\">{city}, {ctry} · {start}</div>\
+                <div style=\"font-weight:600;font-size:14px;line-height:1.3\">{name}</div>\
+                <div style=\"font-size:12px;color:{MID};margin-top:2px\">{city}{sep}{ctry}</div>\
+                <div style=\"font-size:12px;color:{MID}\">{dates}</div>\
                 <div style=\"margin-top:5px;display:flex;flex-wrap:wrap;gap:2px\">\
+                  {hot_badge}\
                   <span class=\"badge\" style=\"background:{TAN};color:{BROWN}\">{etype}</span>\
-                  {fhtml}{dhtml}\
+                  {fhtml}\
                 </div>\
               </div>\
               {link_html}\
             </div>",
+            sep   = if !city.is_empty() && !ctry.is_empty() { ", " } else { "" },
             fhtml = flags(&fs),
-            dhtml = if km > 0.0 { dist(km) } else { String::new() },
         ))
     }).collect();
 
-    let venue_cards: String = near.iter().take(3).map(|v| {
-        let name  = v["name"].as_str().unwrap_or("");
-        let ptype = v["place_type"].as_str().unwrap_or("");
-        let city  = v["city"].as_str().unwrap_or("");
-        let ctry  = v["country"].as_str().unwrap_or("");
-        let km    = v["distance_km"].as_f64().unwrap_or(0.0);
-        let site  = v["website"].as_str().unwrap_or("");
-        let bn    = v["bear_night_schedule"].as_str().unwrap_or("");
-        let site_html = if !site.is_empty() && site != "#" {
-            format!("<a href=\"{site}\" target=\"_blank\" rel=\"noopener\" class=\"btn-t\">Visit</a>")
-        } else { String::new() };
-        card(&format!(
-            "<div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:10px\">\
-              <div style=\"flex:1\">\
-                <div style=\"font-weight:600;font-size:14px\">{name}\
-                  <span style=\"font-weight:400;font-size:11px;color:{MID}\"> {ptype}</span>\
-                </div>\
-                <div style=\"font-size:12px;color:{MID}\">{city}, {ctry} {dhtml}</div>\
-                {bn_html}\
+    let empty_events = if events.is_empty() {
+        format!(
+            "<div style=\"text-align:center;padding:24px 0;color:{MID}\">\
+              <div style=\"font-size:32px;margin-bottom:8px\">🐻</div>\
+              <div style=\"font-size:13px;font-weight:600\">Nothing in the next 30 days</div>\
+              <div style=\"font-size:12px;margin-top:4px\">\
+                <a href=\"/?zone=coming-up&lang={lang}\" style=\"color:{ORANGE}\">Browse upcoming events →</a>\
               </div>\
-              {site_html}\
-            </div>",
-            dhtml   = dist(km),
-            bn_html = if !bn.is_empty() {
-                format!("<div style=\"font-size:11px;color:{ORANGE};margin-top:4px\">🐻 {}</div>",
-                    bn.chars().take(80).collect::<String>())
-            } else { String::new() },
-        ))
-    }).collect();
+            </div>"
+        )
+    } else { String::new() };
 
-    let camp_cards: String = cmpg.iter().take(3).map(|c| {
-        let name = c["name"].as_str().unwrap_or("");
-        let org  = c["org"].as_str().unwrap_or("");
-        let link = c["link"].as_str().unwrap_or("");
+    // ── Campaign cards ────────────────────────────────────────
+    let camp_cards: String = cmpg.iter().take(4).map(|c| {
+        let name   = c["name"].as_str().unwrap_or("");
+        let org    = c["org"].as_str().unwrap_or("");
+        let link   = c["link"].as_str().unwrap_or("");
+        let urgent = c["urgent"].as_bool().unwrap_or(false);
+        let raised = c["raised"].as_i64();
+        let goal   = c["goal"].as_i64();
+        let curr   = c["currency"].as_str().unwrap_or("USD");
         let link_html = if !link.is_empty() && link != "#" {
             format!("<a href=\"{link}\" target=\"_blank\" rel=\"noopener\" class=\"btn-g\">Donate</a>")
         } else { String::new() };
+        let urgent_badge = if urgent {
+            format!("<span style=\"font-size:9px;background:#C0392B;color:#fff;\
+                      border-radius:6px;padding:1px 5px;margin-right:4px\">URGENT</span>")
+        } else { String::new() };
+        let progress = match (raised, goal) {
+            (Some(r), Some(g)) if g > 0 => {
+                let pct = ((r as f64 / g as f64) * 100.0).min(100.0);
+                format!(
+                    "<div style=\"margin-top:6px;background:{TAN};border-radius:3px;height:4px\">\
+                      <div style=\"background:{ORANGE};height:100%;width:{pct:.0}%\"></div>\
+                    </div>"
+                )
+            },
+            _ => String::new(),
+        };
         card(&format!(
-            "<div style=\"display:flex;justify-content:space-between;align-items:center;gap:10px\">\
+            "<div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:10px\">\
               <div style=\"flex:1;min-width:0\">\
-                <div style=\"font-weight:600;font-size:14px;line-height:1.3\">{name}</div>\
+                <div style=\"font-weight:600;font-size:14px;line-height:1.3\">{urgent_badge}{name}</div>\
                 <div style=\"font-size:11px;color:{MID};margin-top:2px\">{org}</div>\
+                {progress}\
               </div>\
-              {link_html}\
+              <div style=\"flex-shrink:0\">{link_html}</div>\
             </div>"
         ))
     }).collect();
 
-    let title_cards: String = ttls.iter().take(5).map(|t| {
-        let title   = t["title_name"].as_str().unwrap_or("");
-        let holder  = t["display_name"].as_str()
+    // ── Title holder cards ────────────────────────────────────
+    let title_cards: String = ttls.iter().take(6).map(|t| {
+        let title  = t["title_name"].as_str().unwrap_or("");
+        let holder = t["display_name"].as_str()
             .unwrap_or_else(|| t["holder_name"].as_str().unwrap_or(""));
-        let status  = t["display_status"].as_str().unwrap_or("");
-        let year    = t["year"].as_i64().unwrap_or(0);
-        let city    = t["city"].as_str().unwrap_or("");
-        let ctry    = t["country"].as_str().unwrap_or("");
-        let scope   = t["competition_scope"].as_str().unwrap_or("");
-        let icon    = match scope {
+        let status = t["display_status"].as_str().unwrap_or("");
+        let year   = t["year"].as_i64().unwrap_or(0);
+        let city   = t["city"].as_str().unwrap_or("");
+        let ctry   = t["country"].as_str().unwrap_or("");
+        let scope  = t["competition_scope"].as_str().unwrap_or("");
+        let icon   = match scope {
             "continental"=>"🌎","national"=>"🏳️","regional"=>"📍","local"=>"🏙️",_=>"🐻"
         };
         let status_badge = if !status.is_empty() {
@@ -569,9 +550,7 @@ async fn zone_now(db: SupabaseClient, month_filter: Option<u32>, fragment: Optio
             "<div style=\"display:flex;justify-content:space-between;align-items:center\">\
               <div>\
                 <div style=\"font-weight:600;font-size:14px\">{icon} {title}</div>\
-                <div style=\"font-size:12px;color:{MID};margin-top:2px\">\
-                  {holder}{status_badge}\
-                </div>\
+                <div style=\"font-size:12px;color:{MID};margin-top:2px\">{holder}{status_badge}</div>\
                 <div style=\"font-size:11px;color:{MID}\">{city}{sep}{ctry}</div>\
               </div>\
               <div style=\"font-size:22px;font-weight:700;color:{ORANGE}\">{year}</div>\
@@ -580,88 +559,35 @@ async fn zone_now(db: SupabaseClient, month_filter: Option<u32>, fragment: Optio
         ))
     }).collect();
 
-    // Fragment: HTMX month-bar clicks request just the event list HTML.
-    // Return bare inner HTML so HTMX can swap #event-list without full reload.
-    if fragment.as_deref() == Some("events") {
-        let frag_html: String = displayed.iter().skip(1).take(9).map(|ev| {
-            let name  = ev["name"].as_str().unwrap_or("");
-            let city  = ev["city"].as_str().unwrap_or("");
-            let ctry  = ev["country"].as_str().unwrap_or("");
-            let start = ev["start_date"].as_str().unwrap_or("");
-            let link  = ev["link"].as_str().unwrap_or("");
-            let etype = ev["type"].as_str().unwrap_or("");
-            let km    = ev["distance_km"].as_f64().unwrap_or(0.0);
-            let fs    = ev_flags(ev);
-            let link_html = if !link.is_empty() && link != "#" {
-                format!("<a href=\"{link}\" target=\"_blank\" rel=\"noopener\" class=\"btn-o\">Info</a>")
-            } else { String::new() };
-            card(&format!(
-                "<div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:10px\">\
-                  <div style=\"flex:1;min-width:0\">\
-                    <div style=\"font-weight:600;font-size:14px;line-height:1.3\">{name} 🔥</div>\
-                    <div style=\"font-size:12px;color:{MID};margin-top:2px\">{city}, {ctry} · {start}</div>\
-                    <div style=\"margin-top:5px;display:flex;flex-wrap:wrap;gap:2px\">\
-                      <span class=\"badge\" style=\"background:{TAN};color:{BROWN}\">{etype}</span>\
-                      {fhtml}{dhtml}\
-                    </div>\
-                  </div>\
-                  {link_html}\
-                </div>",
-                fhtml = flags(&fs),
-                dhtml = if km > 0.0 { dist(km) } else { String::new() },
-            ))
-        }).collect();
-        let view_all = format!(
-            "<a href=\"/?zone=events\" style=\"display:block;text-align:center;font-size:13px;\
-             color:{ORANGE};padding:8px 0 16px\">View all 88 events →</a>"
-        );
-        return Html(format!("{frag_html}{view_all}")).into_response();
-    }
-
-    let month_lbl = month_filter.map(|m| {
-        ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-            .get((m.saturating_sub(1)) as usize).copied().unwrap_or("")
-    });
-    let events_label = month_lbl
-        .map(|l| format!("Hot Events — {l} 🔥"))
-        .unwrap_or_else(|| "Hot Events 🔥".to_string());
-
-    let stats_html = format!(
-        "<div style=\"display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px\">{}</div>",
-        stat_row()
-    );
-
     let body = format!(
-        "{hero}\
-        {stats}\
-        {bar}\
-        <div id=\"event-list\">\
-          {h_events}\
-          {event_cards}\
-          <a href=\"/?zone=events\" style=\"display:block;text-align:center;font-size:13px;\
-             color:{ORANGE};padding:8px 0 16px\">View all 88 events →</a>\
-        </div>\
-        {h_venues}\
-        {venue_cards}\
-        <a href=\"/?zone=places\" style=\"display:block;text-align:center;font-size:13px;\
-           color:{ORANGE};padding:8px 0 16px\">View all 170 venues →</a>\
+        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Now</h1>\
+        <p style=\"font-size:12px;color:{MID};margin-bottom:12px\">\
+          What the bear world is doing in the next 30 days.</p>\
+        \
+        {h_events}\
+        {event_cards}\
+        {empty_events}\
+        <a href=\"/?zone=coming-up&lang={lang}\" \
+           style=\"display:block;text-align:center;font-size:13px;\
+                  color:{ORANGE};padding:8px 0 16px\">Browse all upcoming events →</a>\
+        \
         {h_camps}\
         {camp_cards}\
-        <a href=\"/?zone=campaigns\" style=\"display:block;text-align:center;font-size:13px;\
-           color:{ORANGE};padding:8px 0 16px\">View all campaigns →</a>\
+        <a href=\"/?zone=future&lang={lang}\" \
+           style=\"display:block;text-align:center;font-size:13px;\
+                  color:{ORANGE};padding:4px 0 16px\">All campaigns →</a>\
+        \
         {h_titles}\
         {title_cards}\
-        <a href=\"/?zone=titles\" style=\"display:block;text-align:center;font-size:13px;\
-           color:{ORANGE};padding:8px 0 24px\">Full title archive (87 records) →</a>",
-        stats    = stats_html,
-        bar      = timeline_bar(&all_evs, month_filter, "/?zone=now", "#event-list"),
-        h_events = sh(&events_label, Some(displayed.len())),
-        h_venues = sh("Nearby Venues", Some(near.len())),
+        <a href=\"/?zone=titles\" \
+           style=\"display:block;text-align:center;font-size:13px;\
+                  color:{ORANGE};padding:4px 0 24px\">Full competition archive →</a>",
+        h_events = sh("Happening in the Next 30 Days", Some(events.len())),
         h_camps  = sh("Community Campaigns", Some(cmpg.len())),
         h_titles = sh("Current Title Holders", Some(ttls.len())),
     );
 
-    Html(shell("Now", "What the bear world is doing right now.", "now", &body, lang)).into_response()
+    Html(shell("Now", "Bear events in the next 30 days.", "now", &body, lang)).into_response()
 }
 
 // ── ZONE: COMING UP ───────────────────────────────────────────
@@ -2335,7 +2261,7 @@ async fn zone_digital(db: SupabaseClient, lang: &str) -> Response {
 // ── LEGACY WRAPPERS (kept so existing routes in main.rs still compile) ──────
 // These delegate to zone functions. Remove once Gaspar confirms ?zone= routing.
 
-pub async fn now_page           (State(db): State<SupabaseClient>) -> Response { zone_now(db, None, None, "en").await }
+pub async fn now_page           (State(db): State<SupabaseClient>) -> Response { zone_now(db, "en").await }
 pub async fn coming_up_page     (State(db): State<SupabaseClient>) -> Response { zone_coming_up(db, None, None, None, "en").await }
 pub async fn history_page       (State(db): State<SupabaseClient>) -> Response { zone_archive(db, None, None, "en").await }
 pub async fn bear_future_page   (State(db): State<SupabaseClient>) -> Response { zone_future(db, "en").await }
