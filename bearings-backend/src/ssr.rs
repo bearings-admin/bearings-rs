@@ -712,6 +712,54 @@ async fn zone_archive(db: SupabaseClient, decade: Option<String>, fragment: Opti
     );
     let recent_titles: Vec<serde_json::Value> = db.get_json(&titles_url).await.unwrap_or_default();
 
+    let stories_url = format!(
+        "{}/rest/v1/stories?active=eq.true         &select=title,story_type,year,excerpt         &order=year.desc&limit=20",
+        db.url
+    );
+    let stories: Vec<serde_json::Value> = db.get_json(&stories_url).await.unwrap_or_default();
+
+    let story_cards: String = stories.iter().map(|st| {
+        let stitle   = st["title"].as_str().unwrap_or("");
+        let stype    = st["story_type"].as_str().unwrap_or("story");
+        let syear    = st["year"].as_i64().unwrap_or(0);
+        let sexcerpt = st["excerpt"].as_str().unwrap_or("");
+        let type_label = match stype {
+            "interview"              => "Interview",
+            "first-person"           => "First Person",
+            "scholarship"            => "Scholarship",
+            "institutional-history"  => "History",
+            "oral_history"           => "Oral History",
+            _                        => stype,
+        };
+        card(&format!(
+            "<div>\
+              <div style=\"display:flex;justify-content:space-between;\
+                          align-items:flex-start\">\
+                <div style=\"font-weight:600;font-size:14px;flex:1;\
+                            padding-right:8px\">{stitle}</div>\
+                <div style=\"font-size:20px;font-weight:700;\
+                            color:{ORANGE};flex-shrink:0\">{syear}</div>\
+              </div>\
+              <div style=\"margin:3px 0 6px\">\
+                <span style=\"font-size:10px;font-weight:600;\
+                             text-transform:uppercase;letter-spacing:.08em;\
+                             color:{BROWN};background:{OFF_WHITE};\
+                             border:1px solid {TAN};border-radius:12px;\
+                             padding:2px 8px\">{type_label}</span>\
+              </div>\
+              {excerpt_h}\
+            </div>",
+            excerpt_h = if !sexcerpt.is_empty() {
+                format!(
+                    "<div style=\"font-size:12px;color:{MID};\
+                                 line-height:1.6;font-style:italic\">\
+                      &ldquo;{}&rdquo;</div>",
+                    sexcerpt.chars().take(280).collect::<String>()
+                )
+            } else { String::new() },
+        ))
+    }).collect();
+
     let decades = ["1980s","1990s","2000s","2010s","2020s"];
     let active  = decade.as_deref().unwrap_or("2020s");
     let d_start: i64 = match active {
@@ -778,13 +826,17 @@ async fn zone_archive(db: SupabaseClient, decade: Option<String>, fragment: Opti
         {title_cards}\
         <a href=\"/?zone=titles\" style=\"display:block;text-align:center;font-size:13px;\
            color:{ORANGE};padding:8px 0 16px\">Full title archive (87 records) →</a>\
+        {h_voices}\
+        {story_cards}\
         <div class=\"card\">\
           <div style=\"font-weight:600;font-size:14px;margin-bottom:4px\">Clubs &amp; Organisations</div>\
           <div style=\"font-size:12px;color:{MID};margin-bottom:6px\">49 clubs across 20+ countries.</div>\
           <a href=\"/?zone=clubs\" style=\"font-size:12px;color:{ORANGE}\">View all clubs →</a>\
         </div>",
-        n        = history.len(),
-        h_titles = sh("Recent Title Holders", None),
+        n          = history.len(),
+        h_titles   = sh("Recent Title Holders", None),
+        h_voices   = sh("Voices — Oral Histories &amp; Scholarship", Some(stories.len())),
+        story_cards = story_cards,
     );
     Html(shell("Bear Archives", "Community history 1987 to present.", "archive", &body)).into_response()
 }
@@ -1146,45 +1198,221 @@ async fn zone_titles(db: SupabaseClient) -> Response {
     Html(shell("Titles", "Bear title holders worldwide.", "archive", &body)).into_response()
 }
 async fn zone_creators(db: SupabaseClient) -> Response {
-    let url = format!(
+    // Fetch creators, their media, and stores in parallel
+    let url_creators = format!(
         "{}/rest/v1/creators?active=eq.true\
-         &select=name,creator_type,city,country,bio,website\
+         &select=id,name,creator_type,city,country,bio,website,\
+         spotify_link,youtube_link,bandcamp_link,etsy_link,instagram\
          &order=creator_type.asc,name.asc&limit=100",
         db.url
     );
-    let creators: Vec<serde_json::Value> = db.get_json(&url).await.unwrap_or_default();
-    let items: String = creators.iter().map(|c| {
+    let url_media = format!(
+        "{}/rest/v1/media?active=eq.true\
+         &select=title,creator_id,media_type,year,link,streaming_link\
+         &order=year.desc&limit=200",
+        db.url
+    );
+    let url_stores = format!(
+        "{}/rest/v1/stores?active=eq.true\
+         &select=name,type,link,description,bear_owned,size_inclusive,ships_global,featured\
+         &order=featured.desc.nullslast,name.asc&limit=100",
+        db.url
+    );
+    let (creators_res, media_res, stores_res) = tokio::join!(
+        db.get_json(&url_creators),
+        db.get_json(&url_media),
+        db.get_json(&url_stores),
+    );
+    let creators: Vec<serde_json::Value>  = creators_res.unwrap_or_default();
+    let media_all: Vec<serde_json::Value> = media_res.unwrap_or_default();
+    let stores: Vec<serde_json::Value>    = stores_res.unwrap_or_default();
+
+    // Group media by creator_id
+    let mut media_by_creator: std::collections::HashMap<i64, Vec<&serde_json::Value>> =
+        std::collections::HashMap::new();
+    for m in &media_all {
+        if let Some(cid) = m["creator_id"].as_i64() {
+            media_by_creator.entry(cid).or_default().push(m);
+        }
+    }
+
+    let creator_cards: String = creators.iter().map(|c| {
+        let id    = c["id"].as_i64().unwrap_or(0);
         let name  = c["name"].as_str().unwrap_or("");
         let ctype = c["creator_type"].as_str().unwrap_or("creator");
         let city  = c["city"].as_str().unwrap_or("");
         let ctry  = c["country"].as_str().unwrap_or("");
         let bio   = c["bio"].as_str().unwrap_or("");
         let site  = c["website"].as_str().unwrap_or("");
-        let site_html = if !site.is_empty() && site != "#" {
+        let sp    = c["spotify_link"].as_str().unwrap_or("");
+        let yt    = c["youtube_link"].as_str().unwrap_or("");
+        let bc    = c["bandcamp_link"].as_str().unwrap_or("");
+        let etsy  = c["etsy_link"].as_str().unwrap_or("");
+        let ig    = c["instagram"].as_str().unwrap_or("");
+
+        let mut link_badges: Vec<String> = Vec::new();
+        if !sp.is_empty() && sp != "#" {
+            link_badges.push(format!(
+                "<a href=\"{sp}\" target=\"_blank\" class=\"badge\" \
+                   style=\"background:#1DB954;color:#fff\">Spotify</a>"
+            ));
+        }
+        if !yt.is_empty() && yt != "#" {
+            link_badges.push(format!(
+                "<a href=\"{yt}\" target=\"_blank\" class=\"badge\" \
+                   style=\"background:#FF0000;color:#fff\">YouTube</a>"
+            ));
+        }
+        if !bc.is_empty() && bc != "#" {
+            link_badges.push(format!(
+                "<a href=\"{bc}\" target=\"_blank\" class=\"badge\" \
+                   style=\"background:#1DA0C3;color:#fff\">Bandcamp</a>"
+            ));
+        }
+        if !etsy.is_empty() && etsy != "#" {
+            link_badges.push(format!(
+                "<a href=\"{etsy}\" target=\"_blank\" class=\"badge\" \
+                   style=\"background:#F1641E;color:#fff\">Etsy</a>"
+            ));
+        }
+        if !ig.is_empty() && ig != "#" {
+            link_badges.push(format!(
+                "<a href=\"{ig}\" target=\"_blank\" class=\"badge\" \
+                   style=\"background:#E1306C;color:#fff\">Instagram</a>"
+            ));
+        }
+        let site_btn = if !site.is_empty() && site != "#" {
             format!("<a href=\"{site}\" target=\"_blank\" rel=\"noopener\" class=\"btn-t\">Site</a>")
         } else { String::new() };
+
+        let media_html: String = media_by_creator
+            .get(&id)
+            .map(|items| {
+                items.iter().take(4).map(|m| {
+                    let mtitle  = m["title"].as_str().unwrap_or("");
+                    let mtype   = m["media_type"].as_str().unwrap_or("");
+                    let myear   = m["year"].as_i64()
+                        .map(|y| format!(" ({y})"))
+                        .unwrap_or_default();
+                    let mlink   = m["link"].as_str().unwrap_or("");
+                    let mstream = m["streaming_link"].as_str().unwrap_or("");
+                    let href    = if !mstream.is_empty() && mstream != "#" { mstream } else { mlink };
+                    let dot_col = match mtype {
+                        "album"         => "#1DB954",
+                        "documentary"   => "#c44444",
+                        "book"          => "#D4A017",
+                        "podcast"       => "#8940FA",
+                        "music-video"   => "#E1306C",
+                        _               => "#999999",
+                    };
+                    let label = if !href.is_empty() && href != "#" {
+                        format!(
+                            "<a href=\"{href}\" target=\"_blank\" \
+                               style=\"color:{BROWN};text-decoration:none\">{mtitle}</a>"
+                        )
+                    } else {
+                        mtitle.to_string()
+                    };
+                    format!(
+                        "<div style=\"font-size:11px;margin-top:3px;\
+                                     display:flex;align-items:center;gap:5px\">\
+                          <span style=\"display:inline-block;width:6px;height:6px;\
+                                       border-radius:50%;background:{dot_col};\
+                                       flex-shrink:0\"></span>\
+                          {label}\
+                          <span style=\"color:{MID}\">{mtype}{myear}</span>\
+                        </div>"
+                    )
+                }).collect()
+            })
+            .unwrap_or_default();
+
         card(&format!(
-            "<div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:10px\">\
+            "<div style=\"display:flex;justify-content:space-between;\
+                         align-items:flex-start;gap:10px\">\
               <div style=\"flex:1;min-width:0\">\
                 <div style=\"font-weight:600;font-size:14px\">{name}\
                   <span style=\"font-weight:400;font-size:11px;color:{MID}\"> {ctype}</span>\
                 </div>\
                 <div style=\"font-size:12px;color:{MID}\">{city}{sep}{ctry}</div>\
                 {bio_h}\
+                {media_html}\
+                {links_h}\
               </div>\
-              {site_html}\
+              {site_btn}\
             </div>",
-            sep   = if !city.is_empty() && !ctry.is_empty() { ", " } else { "" },
-            bio_h = if !bio.is_empty() {
-                format!("<div style=\"font-size:12px;color:{MID};margin-top:4px;line-height:1.5\">{}</div>",
-                    bio.chars().take(160).collect::<String>())
+            sep    = if !city.is_empty() && !ctry.is_empty() { ", " } else { "" },
+            bio_h  = if !bio.is_empty() {
+                format!(
+                    "<div style=\"font-size:12px;color:{MID};margin-top:4px;line-height:1.5\">{}</div>",
+                    bio.chars().take(160).collect::<String>()
+                )
+            } else { String::new() },
+            links_h = if !link_badges.is_empty() {
+                format!(
+                    "<div style=\"margin-top:6px;display:flex;gap:4px;flex-wrap:wrap\">{}</div>",
+                    link_badges.join("")
+                )
             } else { String::new() },
         ))
     }).collect();
+
+    let store_cards: String = stores.iter().map(|st| {
+        let sname   = st["name"].as_str().unwrap_or("");
+        let stype   = st["type"].as_str().unwrap_or("");
+        let slink   = st["link"].as_str().unwrap_or("");
+        let sdesc   = st["description"].as_str().unwrap_or("");
+        let owned   = st["bear_owned"].as_bool().unwrap_or(false);
+        let szinc   = st["size_inclusive"].as_bool().unwrap_or(false);
+        let sglobal = st["ships_global"].as_bool().unwrap_or(false);
+        let mut badges: Vec<String> = Vec::new();
+        if owned  { badges.push(format!("<span class=\"badge\" style=\"background:{GOLD};color:{DARK}\">bear-owned</span>")); }
+        if szinc  { badges.push(format!("<span class=\"badge\" style=\"background:{TAN};color:{BROWN}\">size incl.</span>")); }
+        if sglobal { badges.push(format!("<span class=\"badge\" style=\"background:{OFF_WHITE};color:{MID};border:1px solid {TAN}\">ships worldwide</span>")); }
+        let shop_btn = if !slink.is_empty() && slink != "#" {
+            format!("<a href=\"{slink}\" target=\"_blank\" rel=\"noopener\" class=\"btn-t\">Shop</a>")
+        } else { String::new() };
+        card(&format!(
+            "<div style=\"display:flex;justify-content:space-between;\
+                         align-items:flex-start;gap:10px\">\
+              <div style=\"flex:1;min-width:0\">\
+                <div style=\"font-weight:600;font-size:14px\">{sname}\
+                  <span style=\"font-weight:400;font-size:11px;color:{MID}\"> {stype}</span>\
+                </div>\
+                {desc_h}\
+                <div style=\"margin-top:5px;display:flex;gap:4px;flex-wrap:wrap\">{badges_h}</div>\
+              </div>\
+              {shop_btn}\
+            </div>",
+            desc_h  = if !sdesc.is_empty() {
+                format!(
+                    "<div style=\"font-size:12px;color:{MID};margin-top:3px;line-height:1.5\">{}</div>",
+                    sdesc.chars().take(140).collect::<String>()
+                )
+            } else { String::new() },
+            badges_h = badges.join(""),
+        ))
+    }).collect();
+
     let body = format!(
-        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:16px\">Creators</h1>{items}"
+        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">\
+          Creators &amp; Makers</h1>\
+        <p style=\"font-size:12px;color:{MID};margin-bottom:16px\">\
+          Musicians, filmmakers, illustrators, historians and more building bear culture.\
+        </p>\
+        {h_creators}\
+        {creator_cards}\
+        {h_shops}\
+        {store_cards}",
+        h_creators = sh("Bear Creators", Some(creators.len())),
+        h_shops    = sh("Bear Shops", Some(stores.len())),
     );
-    Html(shell("Creators", "Bear community creators.", "archive", &body)).into_response()
+    Html(shell(
+        "Creators & Makers",
+        "Bear community creators and shops.",
+        "creators",
+        &body,
+    )).into_response()
 }
 
 async fn zone_campaigns(db: SupabaseClient) -> Response {
