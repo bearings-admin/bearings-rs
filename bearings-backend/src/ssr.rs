@@ -46,7 +46,9 @@ pub struct ZoneQuery {
     pub zone:     Option<String>,
     pub decade:   Option<String>,
     pub month:    Option<u32>,
-    pub fragment: Option<String>,  // "events" → return bare #event-list HTML for HTMX
+    pub fragment:     Option<String>,  // "events" → return bare #event-list HTML for HTMX
+    pub place_type:    Option<String>,
+    pub place_country: Option<String>,
 }
 
 // ── Design system (Variant G) ─────────────────────────────────
@@ -154,7 +156,7 @@ fn shell(title: &str, description: &str, active: &str, body: &str) -> String {
               border-top:1px solid {TAN};z-index:100\">\n\
     <div style=\"max-width:640px;margin:0 auto;display:flex;\n\
                 justify-content:space-around;align-items:center;padding:6px 8px 10px\">\n\
-      {n_now}{n_coming}{n_archive}{n_future}{n_places}\n\
+      {n_now}{n_coming}{n_archive}{n_digital}{n_future}{n_places}\n\
     </div>\n\
   </nav>\n\
 \n\
@@ -162,7 +164,8 @@ fn shell(title: &str, description: &str, active: &str, body: &str) -> String {
 </html>",
         n_now     = nav("now",       "🐻", "NOW"),
         n_coming  = nav("coming-up", "📍", "TRIPS"),
-        n_archive = nav("archive",   "📚", "ARCHIVE"),
+        n_archive  = nav("archive",        "📚", "ARCHIVE"),
+        n_digital  = nav("digital-spaces", "📱", "ONLINE"),
         n_future  = nav("future",    "🏛️","FUTURE"),
         n_places  = nav("places",    "🍺", "PLACES"),
     )
@@ -274,9 +277,9 @@ pub async fn root(
 ) -> Response {
     match q.zone.as_deref().unwrap_or("now") {
         "coming-up"      => zone_coming_up(db).await,
-        "archive"        => zone_archive(db, q.decade).await,
+        "archive"        => zone_archive(db, q.decade, q.fragment.clone()).await,
         "future"         => zone_future(db).await,
-        "places"         => zone_places(db).await,
+        "places"         => zone_places(db, q.place_type.clone(), q.place_country.clone()).await,
         "events"         => zone_events(db, q.month).await,
         "clubs"          => zone_clubs(db).await,
         "titles"         => zone_titles(db).await,
@@ -690,7 +693,7 @@ async fn zone_coming_up(db: SupabaseClient) -> Response {
 
 // ── ZONE: BEAR ARCHIVES (decade tabs) ────────────────────────
 
-async fn zone_archive(db: SupabaseClient, decade: Option<String>) -> Response {
+async fn zone_archive(db: SupabaseClient, decade: Option<String>, fragment: Option<String>) -> Response {
     let url = format!(
         "{}/rest/v1/bear_history?active=eq.true\
          &select=year,title,description,category,significance\
@@ -724,7 +727,7 @@ async fn zone_archive(db: SupabaseClient, decade: Option<String>) -> Response {
             .count();
         format!(
             "<a href=\"/?zone=archive&decade={d}\"\
-               hx-get=\"/?zone=archive&decade={d}\"\
+               hx-get=\"/?zone=archive&decade={d}&fragment=tl\"\
                hx-target=\"#archive-tl\" hx-swap=\"outerHTML\"\
                hx-indicator=\"#archive-spin\"\
                class=\"dtab {cls}\">{d} <span style=\"font-size:10px;opacity:.7\">({count})</span></a>",
@@ -739,6 +742,11 @@ async fn zone_archive(db: SupabaseClient, decade: Option<String>) -> Response {
         .collect();
 
     let timeline = build_timeline(&decade_entries);
+
+    // Return only timeline fragment for HTMX decade tab swaps
+    if fragment.as_deref() == Some("tl") {
+        return Html(format!("<div id=\"archive-tl\">{}</div>", timeline)).into_response();
+    }
 
     let title_cards: String = recent_titles.iter().take(8).map(|t| {
         let title  = t["title_name"].as_str().unwrap_or("");
@@ -839,133 +847,130 @@ fn build_timeline(entries: &[&serde_json::Value]) -> String {
 // ── ZONE: BEAR FUTURE ─────────────────────────────────────────
 
 async fn zone_future(db: SupabaseClient) -> Response {
-    let s_url = format!(
-        "{}/rest/v1/platform_settings\
-         ?key=in.(treasury_balance_ada,operational_balance_ada,\
-         governance_token_name,governance_dao_threshold,treasury_phase)",
-        db.url
-    );
-    let settings: Vec<serde_json::Value> = db.get_json(&s_url).await.unwrap_or_default();
-    let get = |k: &str| settings.iter()
-        .find(|s| s["key"].as_str() == Some(k))
-        .and_then(|s| s["value"].as_str())
-        .unwrap_or("").to_string();
-
-    let token_name    = get("governance_token_name");
-    let dao_threshold = get("governance_dao_threshold");
-    let phase         = get("treasury_phase");
-
+    // Load community proposals (reframed as ideas, no crypto required)
     let p_url = format!(
         "{}/rest/v1/bear_future_proposals?active=eq.true&order=created_at.desc&limit=10",
         db.url
     );
     let proposals: Vec<serde_json::Value> = db.get_json(&p_url).await.unwrap_or_default();
 
-    let treasury_card = format!(
-        "<div style=\"border-radius:16px;overflow:hidden;margin-bottom:12px;\
-             border:1px solid {TAN};box-shadow:0 1px 4px rgba(0,0,0,.06)\">\
-          <div class=\"stripe\"></div>\
-          <div style=\"background:#fff;padding:16px\">\
-            <div style=\"font-size:10px;font-weight:700;text-transform:uppercase;\
-                        letter-spacing:.1em;color:{MID};margin-bottom:12px\">Community Treasury</div>\
-            <div style=\"display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px\">\
-              <div style=\"background:{OFF_WHITE};border-radius:12px;padding:12px;text-align:center\">\
-                <div style=\"font-size:22px;font-weight:700;color:{ORANGE}\">₳ 0</div>\
-                <div style=\"font-size:11px;color:{MID}\">Community ADA</div>\
-              </div>\
-              <div style=\"background:{OFF_WHITE};border-radius:12px;padding:12px;text-align:center\">\
-                <div style=\"font-size:22px;font-weight:700;color:{BROWN}\">₳ 0</div>\
-                <div style=\"font-size:11px;color:{MID}\">Operational ADA</div>\
-              </div>\
-            </div>\
-            <div style=\"font-size:11px;color:{MID};text-align:center;margin-bottom:12px\">\
-              Phase {phase} · Wallets being configured</div>\
-            <div style=\"background:{OFF_WHITE};border-radius:12px;padding:14px;text-align:center\">\
-              <div style=\"font-size:18px;font-weight:700;color:{BROWN}\">{token_name}</div>\
-              <div style=\"font-size:11px;color:{MID};margin-bottom:4px\">Governance token · Follow the NORTH.</div>\
-              <div style=\"font-size:11px;color:{MID};margin-bottom:8px\">\
-                0 / {dao_threshold} holders · DAO unlocks at {dao_threshold}</div>\
-              <div style=\"height:6px;border-radius:999px;background:{TAN}\">\
-                <div style=\"height:6px;border-radius:999px;background:{GOLD};width:0%\"></div>\
-              </div>\
-            </div>\
-          </div>\
-        </div>"
-    );
-
-    let north_block = format!(
-        "<div style=\"border-radius:16px;border:1px solid {GOLD};\
-             background:#FFFEF5;padding:16px;margin-bottom:12px\">\
-          <div style=\"font-weight:600;font-size:14px;color:{BROWN};margin-bottom:8px\">What is NORTH?</div>\
-          <div style=\"font-size:12px;color:{MID};line-height:1.7\">\
-            <strong style=\"color:{BROWN}\">NORTH</strong> is the Bearings governance token on Cardano.\
-            Every verified title holder, club officer, and community steward receives 1 NORTH.<br><br>\
-            More NORTH = more sway. <em>Follow the NORTH.</em><br><br>\
-            When 100 holders are verified, the DAO activates — NORTH holders vote on proposals\
-            directly, no intermediary.\
-          </div>\
-        </div>"
-    );
-
     let proposals_html: String = if proposals.is_empty() {
         format!(
             "<div style=\"border-radius:16px;border:2px dashed {TAN};\
                  padding:24px;text-align:center;margin-bottom:12px\">\
-              <div style=\"font-weight:600;font-size:14px;color:{BROWN};margin-bottom:6px\">No active proposals</div>\
+              <div style=\"font-weight:600;font-size:14px;color:{BROWN};margin-bottom:6px\">No ideas yet</div>\
               <div style=\"font-size:12px;color:{MID};line-height:1.6\">\
-                The community treasury and governance are being established.\
-                First proposals appear here once wallets are configured.</div>\
+                Community ideas and proposals will appear here.\
+                Submit ideas via the steward email.</div>\
             </div>"
         )
     } else {
         proposals.iter().map(|p| {
-            let title = p["title"].as_str().unwrap_or("Proposal");
-            let sum   = p["summary"].as_str().unwrap_or("");
-            let yes   = p["vote_yes"].as_i64().unwrap_or(0);
-            let no    = p["vote_no"].as_i64().unwrap_or(0);
-            let total = (yes + no).max(1);
-            let pct   = yes * 100 / total;
+            let title = p["title"].as_str().unwrap_or("Idea");
+            let desc  = p["description"].as_str().unwrap_or("");
+            let cat   = p["cause_category"].as_str().unwrap_or("");
             card(&format!(
                 "<div>\
                   <div style=\"font-weight:600;font-size:14px\">{title}</div>\
-                  <div style=\"font-size:11px;color:{MID};margin-bottom:8px\">{sum}</div>\
-                  <div style=\"display:flex;gap:12px;font-size:12px;margin-bottom:6px\">\
-                    <span style=\"color:#2e7d32\">✓ {yes} yes</span>\
-                    <span style=\"color:#b71c1c\">✗ {no} no</span>\
-                    <span style=\"color:{MID}\">{pct}% approval</span>\
-                  </div>\
-                  <div style=\"height:4px;border-radius:999px;background:{TAN}\">\
-                    <div style=\"height:4px;border-radius:999px;background:{GOLD};width:{pct}%\"></div>\
-                  </div>\
-                </div>"
+                  {cat_html}\
+                  <div style=\"font-size:12px;color:{MID};margin-top:4px;line-height:1.6\">{desc}</div>\
+                </div>",
+                cat_html = if !cat.is_empty() {
+                    format!("<span style=\"font-size:11px;color:{ORANGE};font-weight:600\">{cat}</span>")
+                } else { String::new() },
             ))
         }).collect()
     };
 
+    let vision_card = format!(
+        "<div class=\"card\" style=\"margin-bottom:12px\">\
+          <div style=\"font-size:10px;font-weight:700;text-transform:uppercase;\
+                      letter-spacing:.1em;color:{MID};margin-bottom:10px\">About Bear Future</div>\
+          <div style=\"font-size:13px;line-height:1.7;color:{DARK}\">\
+            Bearings is community infrastructure — built by and for the bear world.\
+            Bear Future is where the community decides what comes next:<br><br>\
+            <strong>Archive endowment</strong> — keeping competition history permanently funded.<br>\
+            <strong>Senior bear programs</strong> — reaching isolated community elders.<br>\
+            <strong>Camp accessibility</strong> — grants for campgrounds to become more accessible.<br>\
+            <strong>New territories</strong> — which regions need more coverage first.\
+          </div>\
+        </div>"
+    );
+
+    let contact_card = format!(
+        "<div class=\"card\" style=\"text-align:center;margin-top:8px\">\
+          <div style=\"font-size:12px;color:{MID};margin-bottom:6px\">Have an idea for the community?</div>\
+          <a href=\"mailto:ursasteward@pm.me\" class=\"btn-o\">Submit an idea</a>\
+        </div>"
+    );
+
     let body = format!(
         "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Bear Future</h1>\
         <p style=\"font-size:12px;color:{MID};margin-bottom:16px\">\
-          Community treasury · NORTH governance · Proposals</p>\
-        {treasury_card}\
-        {north_block}\
+          Where the community decides what comes next.</p>\
+        {vision_card}\
         {h_props}\
-        {proposals_html}",
-        h_props = sh("Active Proposals", Some(proposals.len())),
+        {proposals_html}\
+        {contact_card}",
+        h_props = sh("Community Ideas", Some(proposals.len())),
     );
-    Html(shell("Bear Future", "Community treasury and NORTH governance.", "future", &body)).into_response()
+    Html(shell("Bear Future", "Community direction and proposals.", "future", &body)).into_response()
 }
 
 // ── SUPPLEMENTARY ZONES ───────────────────────────────────────
 
-async fn zone_places(db: SupabaseClient) -> Response {
+async fn zone_places(db: SupabaseClient, filter_type: Option<String>, filter_country: Option<String>) -> Response {
+    let ft = filter_type.as_deref().unwrap_or("");
+    let fc = filter_country.as_deref().unwrap_or("");
+    let tc = if !ft.is_empty() { format!("&place_type=eq.{ft}") } else { String::new() };
+    let cc = if !fc.is_empty() { format!("&country=eq.{fc}") } else { String::new() };
     let url = format!(
         "{}/rest/v1/places?active=eq.true\
          &select=name,place_type,city,country,address,hours_open,website,\
          booking_link,bear_popular,bear_night_schedule,inclusion_flag_codes\
-         &order=country.asc,city.asc&limit=200",
+         {tc}{cc}\
+         &order=bear_popular.desc.nullslast,country.asc,city.asc&limit=200",
         db.url
     );
     let places: Vec<serde_json::Value> = db.get_json(&url).await.unwrap_or_default();
+
+    let mut countries: Vec<String> = places.iter()
+        .filter_map(|p| p["country"].as_str().map(String::from))
+        .collect::<std::collections::HashSet<_>>().into_iter().collect();
+    countries.sort();
+
+    let type_opts: &[(&str, &str)] = &[
+        ("", "All types"), ("bar", "Bar"), ("leather_bar", "Leather Bar"),
+        ("sauna_bathhouse", "Sauna / Bathhouse"), ("campground", "Campground"),
+        ("party_venue", "Party Venue"),
+    ];
+    let type_sel: String = type_opts.iter().map(|(v, l)| {
+        let sel = if *v == ft { " selected" } else { "" };
+        format!("<option value=\"{v}\"{sel}>{l}</option>")
+    }).collect();
+    let ctry_opts: Vec<(String, String)> = std::iter::once(("".to_string(), "All countries".to_string()))
+        .chain(countries.iter().map(|c| (c.clone(), c.clone())))
+        .collect();
+    let ctry_sel: String = ctry_opts.iter().map(|(v, l)| {
+        let sel = if v.as_str() == fc { " selected" } else { "" };
+        format!("<option value=\"{v}\"{sel}>{l}</option>")
+    }).collect();
+    let sel_style = format!(
+        "font-size:12px;padding:6px 10px;border-radius:20px;\
+         border:1px solid {TAN};background:{OFF_WHITE};color:{DARK}"
+    );
+    let filter_bar = format!(
+        "<form method=\"get\" action=\"/\" \
+               style=\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px\">\
+          <input type=\"hidden\" name=\"zone\" value=\"places\">\
+          <select name=\"place_type\" onchange=\"this.form.submit()\" style=\"{sel_style}\">\
+            {type_sel}</select>\
+          <select name=\"place_country\" onchange=\"this.form.submit()\" style=\"{sel_style}\">\
+            {ctry_sel}</select>\
+          <span style=\"font-size:11px;color:{MID};align-self:center\">{n} venues</span>\
+        </form>",
+        n = places.len(),
+    );
     let items: String = places.iter().map(|p| {
         let name  = p["name"].as_str().unwrap_or("");
         let ptype = p["place_type"].as_str().unwrap_or("");
@@ -1014,7 +1019,7 @@ async fn zone_places(db: SupabaseClient) -> Response {
         ))
     }).collect();
     let body = format!(
-        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:16px\">Bear Venues</h1>{items}"
+        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:8px\">Bear Venues</h1>{filter_bar}{items}"
     );
     Html(shell("Places", "Bear bars, saunas, campgrounds worldwide.", "places", &body)).into_response()
 }
@@ -1301,10 +1306,10 @@ async fn zone_digital(db: SupabaseClient) -> Response {
 
 pub async fn now_page           (State(db): State<SupabaseClient>) -> Response { zone_now(db, None, None).await }
 pub async fn coming_up_page     (State(db): State<SupabaseClient>) -> Response { zone_coming_up(db).await }
-pub async fn history_page       (State(db): State<SupabaseClient>) -> Response { zone_archive(db, None).await }
+pub async fn history_page       (State(db): State<SupabaseClient>) -> Response { zone_archive(db, None, None).await }
 pub async fn bear_future_page   (State(db): State<SupabaseClient>) -> Response { zone_future(db).await }
 pub async fn events_page        (State(db): State<SupabaseClient>) -> Response { zone_events(db, None).await }
-pub async fn places_page        (State(db): State<SupabaseClient>) -> Response { zone_places(db).await }
+pub async fn places_page        (State(db): State<SupabaseClient>) -> Response { zone_places(db, None, None).await }
 pub async fn clubs_page         (State(db): State<SupabaseClient>) -> Response { zone_clubs(db).await }
 pub async fn titles_page        (State(db): State<SupabaseClient>) -> Response { zone_titles(db).await }
 pub async fn creators_page      (State(db): State<SupabaseClient>) -> Response { zone_creators(db).await }
