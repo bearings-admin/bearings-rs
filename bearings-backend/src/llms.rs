@@ -145,3 +145,12 @@ pub async fn llms_full_txt(
         content,
     ).into_response())
 }
+
+/// GET /robots.txt — points AI crawlers to /llms.txt
+pub async fn robots_txt() -> impl IntoResponse {
+    let content = "User-agent: *\nAllow: /\n\nUser-agent: *\nSitemap: https://www.bearings.community/llms.txt\n";
+    (
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        content,
+    )
+}

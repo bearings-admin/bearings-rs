@@ -182,6 +182,7 @@ async fn main() -> anyhow::Result<()> {
         // ── AI crawlability ─────────────────────────────────────
         .route("/llms.txt",                      get(llms::llms_txt))
         .route("/llms-full.txt",                 get(llms::llms_full_txt))
+        .route("/robots.txt",                      get(llms::robots_txt))
         // ── Utility ─────────────────────────────────────────────
         .route("/health",                        get(health))
         .route("/hello/:name",                   get(routes::hello::handler))

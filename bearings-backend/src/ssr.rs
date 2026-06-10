@@ -420,22 +420,26 @@ async fn zone_now(db: SupabaseClient, lang: &str) -> Response {
         db.url
     );
 
-    // Campaigns and titles from now_feed (no lat/lng proximity needed)
-    let rpc_body = serde_json::json!({
-        "input_lat": serde_json::Value::Null,
-        "input_lng": serde_json::Value::Null,
-        "radius_km": serde_json::Value::Null,
-    });
+    // Active campaigns
+    let camps_url = format!(
+        "{}/rest/v1/campaigns?active=eq.true&select=name,org,link,raised,goal,currency,urgent,ends_at&order=urgent.desc,ends_at.asc.nullslast&limit=6",
+        db.url
+    );
+    // Current title holders with competition scope via embedded join, year >= 2022
+    let titles_url = format!(
+        "{}/rest/v1/title_holders?year=gte.2022&select=title_name,holder_name,year,city,country,competitions(scope)&order=year.desc&limit=40",
+        db.url
+    );
 
-    let (events_res, feed_res) = tokio::join!(
+    let (events_res, camps_res, titles_res) = tokio::join!(
         db.get_json::<Vec<serde_json::Value>>(&events_url),
-        db.post_rpc("now_feed", &rpc_body),
+        db.get_json::<Vec<serde_json::Value>>(&camps_url),
+        db.get_json::<Vec<serde_json::Value>>(&titles_url),
     );
 
     let events = events_res.unwrap_or_default();
-    let feed: serde_json::Value = feed_res.unwrap_or(serde_json::Value::Object(Default::default()));
-    let cmpg   = feed["active_campaigns"].as_array().cloned().unwrap_or_default();
-    let ttls   = feed["current_titles"].as_array().cloned().unwrap_or_default();
+    let cmpg   = camps_res.unwrap_or_default();
+    let ttls   = titles_res.unwrap_or_default();
 
     // ── Event cards ───────────────────────────────────────────
     let event_cards: String = events.iter().map(|ev| {
@@ -528,34 +532,33 @@ async fn zone_now(db: SupabaseClient, lang: &str) -> Response {
         ))
     }).collect();
 
-    // ── Title holder cards ────────────────────────────────────
-    let title_cards: String = ttls.iter().take(6).map(|t| {
-        let title  = t["title_name"].as_str().unwrap_or("");
-        let holder = t["display_name"].as_str()
-            .unwrap_or_else(|| t["holder_name"].as_str().unwrap_or(""));
-        let status = t["display_status"].as_str().unwrap_or("");
-        let year   = t["year"].as_i64().unwrap_or(0);
-        let city   = t["city"].as_str().unwrap_or("");
-        let ctry   = t["country"].as_str().unwrap_or("");
-        let scope  = t["competition_scope"].as_str().unwrap_or("");
-        let icon   = match scope {
-            "continental"=>"🌎","national"=>"🏳️","regional"=>"📍","local"=>"🏙️",_=>"🐻"
+    // ── Title holder cards grouped by scope ─────────────────────
+    let scope_order = ["international","continental","national","regional","local"];
+    let title_cards: String = scope_order.iter().filter_map(|&sc| {
+        let group: Vec<_> = ttls.iter().filter(|t| {
+            t["competitions"]["scope"].as_str().unwrap_or("") == sc
+        }).collect();
+        if group.is_empty() { return None; }
+        let scope_label = match sc {
+            "international" => "International",
+            "continental"   => "Continental",
+            "national"      => "National",
+            "regional"      => "Regional",
+            _               => "Local",
         };
-        let status_badge = if !status.is_empty() {
-            format!("<span style=\"font-size:9px;font-weight:600;padding:1px 6px;\
-                     border-radius:999px;background:#EDE0D4;color:{BROWN};\
-                     margin-left:4px;vertical-align:middle\">{status}</span>")
-        } else { String::new() };
-        card(&format!(
-            "<div style=\"display:flex;justify-content:space-between;align-items:center\">\
-              <div>\
-                <div style=\"font-weight:600;font-size:14px\">{icon} {title}</div>\
-                <div style=\"font-size:12px;color:{MID};margin-top:2px\">{holder}{status_badge}</div>\
-                <div style=\"font-size:11px;color:{MID}\">{city}{sep}{ctry}</div>\
-              </div>\
-              <div style=\"font-size:22px;font-weight:700;color:{ORANGE}\">{year}</div>\
-            </div>",
-            sep = if !city.is_empty() && !ctry.is_empty() { ", " } else { "" },
+        let rows: String = group.iter().map(|t| {
+            let title  = t["title_name"].as_str().unwrap_or("");
+            let holder = t["holder_name"].as_str().unwrap_or("");
+            let year   = t["year"].as_i64().unwrap_or(0);
+            let city   = t["city"].as_str().unwrap_or("");
+            let ctry   = t["country"].as_str().unwrap_or("");
+            card(&format!(
+                "<div style=\"display:flex;justify-content:space-between;align-items:center\">                  <div>                    <div style=\"font-weight:600;font-size:14px\">{title}</div>                    <div style=\"font-size:12px;color:{MID};margin-top:2px\">{holder}</div>                    <div style=\"font-size:11px;color:{MID}\">{city}{sep}{ctry}</div>                  </div>                  <div style=\"font-size:22px;font-weight:700;color:{ORANGE}\">{year}</div>                </div>",
+                sep = if !city.is_empty() && !ctry.is_empty() { ", " } else { "" },
+            ))
+        }).collect();
+        Some(format!(
+            "<div style=\"font-size:11px;font-weight:700;text-transform:uppercase;                         letter-spacing:.1em;color:{BROWN};padding:8px 0 4px\">              {scope_label}</div>{rows}"
         ))
     }).collect();
 
@@ -818,7 +821,7 @@ async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>, event_cou
 async fn zone_archive(db: SupabaseClient, decade: Option<String>, fragment: Option<String>, lang: &str) -> Response {
     let url = format!(
         "{}/rest/v1/bear_history?active=eq.true\
-         &select=year,title,description,category,significance\
+         &select=year,title,description,category,significance,link\
          &order=year.asc&limit=100",
         db.url
     );
@@ -1067,6 +1070,14 @@ fn build_timeline(entries: &[&serde_json::Value]) -> String {
             )
         } else { String::new() };
 
+        let link     = h["link"].as_str().unwrap_or("");
+        let src_html = if !link.is_empty() && link != "#" {
+            format!(
+                "<div style=\"margin-top:5px\">\n                  <a href=\"{link}\" target=\"_blank\" rel=\"noopener\" \n                     style=\"font-size:10px;color:{ORANGE};text-decoration:none;\n                            border:1px solid {ORANGE};border-radius:10px;\n                            padding:1px 8px\">source ↗</a>\n                </div>"
+            )
+        } else { String::new() };
+
+
         format!(
             "<div style=\"display:flex;gap:12px;margin-bottom:16px\">\
               <div style=\"display:flex;flex-direction:column;align-items:center\">\
@@ -1077,7 +1088,7 @@ fn build_timeline(entries: &[&serde_json::Value]) -> String {
                 <span class=\"cat\" style=\"background:{cat_bg};color:{cat_fg}\">{cat_label}</span>\
                 <div style=\"font-weight:600;font-size:14px;line-height:1.3;margin-bottom:6px\">{title}</div>\
                 <div style=\"font-size:12px;color:{MID};line-height:1.6\">{desc}</div>\
-                {sig_html}\
+                {sig_html}\n                {src_html}\
               </div>\
             </div>"
         )
