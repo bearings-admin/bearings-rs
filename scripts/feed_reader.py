@@ -303,6 +303,60 @@ def process_feed(feed):
     return feed_new
 
 # ── Main ───────────────────────────────────────────────────────
+
+# ── Title-holder gap research ─────────────────────────────────
+HOLDER_SIGNALS = re.compile(
+    r"(winner|titleholder|title holder|crowned|reigning|sash|"
+    r"current\s+(mr|bear)|\bmr\.?\s+bear\b|20[12][0-9])", re.I)
+
+def report_missing_title_holders():
+    """Surface active competitions with no title holders, and scan any official
+    site for likely winner leads. NEVER inserts — the steward verifies a source
+    and adds the record (gap records over guesses; CONST: source required)."""
+    try:
+        gaps = api_get(
+            "competitions_missing_holders"
+            "?select=name,scope,country,city,website&order=scope.asc,country.asc")
+    except Exception as e:
+        print(f"\n[title-holders] could not load gap view: {e}")
+        return
+
+    if not gaps:
+        print("\n[title-holders] no gaps - every active competition has a holder.")
+        return
+
+    print(f"\n[title-holders] {len(gaps)} competitions missing holders:")
+    for g in gaps:
+        site = (g.get("website") or "").strip()
+        has_site = site.startswith("http")
+        loc = (g.get("city") or "").strip()
+        print(f"    - [{g['scope']}] {g['name']} - {loc}, {g['country']}  "
+              f"{site if has_site else '(no website on record)'}")
+        if not has_site:
+            continue
+        try:
+            body, *_ = fetch_url(site)
+        except Exception as e:
+            print(f"        site fetch failed: {e}")
+            continue
+        if not body:
+            continue
+        text = re.sub(r"<[^>]+>", " ", body.decode("utf-8", "ignore"))
+        leads = []
+        for line in re.split(r"[\n\.•]", text):
+            line = " ".join(line.split())
+            if 8 < len(line) < 160 and HOLDER_SIGNALS.search(line):
+                leads.append(line)
+        if leads:
+            for ln in leads[:3]:
+                print(f"        lead: {ln}")
+        else:
+            print("        (no obvious winner text - needs manual check)")
+
+    print("[title-holders] leads are UNVERIFIED - steward confirms a source "
+          "before adding (no guessed names).")
+
+
 def main():
     ts = datetime.now(timezone.utc).isoformat()
     print(f"[{ts}] Bearings feed reader starting")
@@ -322,6 +376,8 @@ def main():
         total_new += process_feed(feed)
 
     print(f"\n[done] {total_new} total new candidates queued for review")
+
+    report_missing_title_holders()
 
 if __name__ == "__main__":
     env_path = "/opt/bearings-rs/.env"

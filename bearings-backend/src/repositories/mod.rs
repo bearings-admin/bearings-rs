@@ -24,6 +24,7 @@ pub mod story_repo;
 pub mod flag_repo;
 pub mod bear_future_repo;
 pub mod vote_repo;
+pub mod transparency_repo;
 pub mod future_idea_repo;
 
 /// Build a PostgREST filter clause `&col=op.value` with the value percent-encoded.

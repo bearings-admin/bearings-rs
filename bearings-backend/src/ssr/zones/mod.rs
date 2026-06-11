@@ -24,3 +24,4 @@ pub mod campaigns;
 pub mod ical;
 pub mod digital;
 pub mod admin;
+pub mod transparency;

@@ -63,6 +63,9 @@ pub(crate) struct CampaignRow {
     pub currency:    Option<String>,
     pub urgent:      Option<bool>,
     pub ends_at:     Option<String>,
+    pub cause:         Option<String>,
+    pub donate_url:    Option<String>,
+    pub usdc_accepted: Option<bool>,
 }
 
 // ── Places ────────────────────────────────────────────────────────────────────

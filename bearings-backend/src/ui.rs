@@ -42,7 +42,7 @@ pub(crate) fn shell(title: &str, description: &str, active: &str, body: &str, la
     let tl = |key: &str| i18n::t(i18n, lang, key);
 
     // Language switcher
-    let lang_switcher: String = [("en","EN"),("es","ES"),("fr","FR")].iter().map(|(code, label)| {
+    let lang_switcher: String = [("en","EN"),("es","ES"),("fr","FR"),("ja","JA")].iter().map(|(code, label)| {
         let active_style = if *code == lang {
             format!("background:{BROWN};color:#fff")
         } else {
@@ -141,7 +141,7 @@ padding:10px 0;border-bottom:1px solid {TAN};text-decoration:none;color:{DARK}\"
 <span style=\"font-size:18px\">🔭</span><span style=\"font-size:14px\">Bear Future</span></a>\n\
     <a href=\"/?zone=ical&lang={lang}\" style=\"display:flex;align-items:center;gap:10px;\
 padding:10px 0;text-decoration:none;color:{DARK}\">\
-<span style=\"font-size:18px\">📅</span><span style=\"font-size:14px\">iCal Export</span></a>\n\
+<span style=\"font-size:18px\">📅</span><span style=\"font-size:14px\">iCal Export</span></a><a href=\"/?zone=transparency&lang={lang}\" style=\"display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid {TAN};text-decoration:none;color:{DARK}\"><span style=\"font-size:18px\">💸</span><span style=\"font-size:14px\">Transparency</span></a>\n\
   </div>\n\
 \n\
   <header style=\"max-width:640px;margin:0 auto;padding:10px 16px 8px\">\n\

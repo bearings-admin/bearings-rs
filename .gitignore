@@ -27,3 +27,5 @@ Thumbs.db
 bearings-backend.bin
 *.bin
 *.bak
+__pycache__/
+*.pyc

@@ -23,6 +23,7 @@ use zones::campaigns::zone_campaigns;
 use zones::ical::zone_ical;
 use zones::digital::zone_digital;
 use zones::admin::zone_admin;
+use zones::transparency::zone_transparency;
 
 
 use axum::{
@@ -56,7 +57,7 @@ pub struct ZoneQuery {
 pub enum Zone {
     Now, ComingUp, Archive, Future,
     Places, Events, Clubs, Titles, Creators,
-    Campaigns, DigitalSpaces, Ical, Admin, History,
+    Campaigns, DigitalSpaces, Ical, Admin, History, Transparency,
     Unknown,
 }
 
@@ -77,6 +78,7 @@ impl Zone {
             "ical"           => Self::Ical,
             "admin"          => Self::Admin,
             "history"        => Self::History,
+            "transparency"   => Self::Transparency,
             _                => Self::Unknown,
         }
     }
@@ -88,7 +90,7 @@ pub async fn root(
     State(db): State<SupabaseClient>,
     Query(q): Query<ZoneQuery>,
 ) -> Response {
-    let lang_owned = match q.lang.as_deref() { Some("es") => "es", Some("fr") => "fr", _ => "en" };
+    let lang_owned = match q.lang.as_deref() { Some("es") => "es", Some("fr") => "fr", Some("ja") => "ja", _ => "en" };
     match Zone::parse(q.zone.as_deref().unwrap_or("now")) {
         Zone::Now           => zone_now(db, lang_owned).await,
         Zone::ComingUp      => zone_coming_up(db, q.months_ahead, q.event_country.clone(), q.month, lang_owned).await,
@@ -103,6 +105,7 @@ pub async fn root(
         Zone::DigitalSpaces => zone_digital(db, lang_owned).await,
         Zone::Ical          => zone_ical(lang_owned).await,
         Zone::Admin         => zone_admin(db, q.token.clone(), lang_owned).await,
+        Zone::Transparency  => zone_transparency(db, lang_owned).await,
         Zone::History | Zone::Unknown
                             => zone_coming_up(db, None, None, None, lang_owned).await,
     }
@@ -147,6 +150,7 @@ mod tests {
             ("ical",           Zone::Ical),
             ("admin",          Zone::Admin),
             ("history",        Zone::History),
+            ("transparency",   Zone::Transparency),
         ];
         for (input, expected) in cases {
             assert_eq!(Zone::parse(input), expected, "?zone={input} did not parse correctly");
