@@ -1,8 +1,7 @@
-﻿-- Bearings — Supabase schema (public schema)
--- Captured via catalog introspection on 2026-06-11 (no app-side DB password,
--- so this is reconstructed, not a pg_dump). For an authoritative backup run:
---   pg_dump --schema-only --no-owner "postgresql://postgres:<DB_PASSWORD>@db.mntdhflffhrjjvipxgyl.supabase.co:5432/postgres"
+﻿-- Bearings - Supabase schema (public schema)
+-- Captured via catalog introspection on 2026-06-11 (refreshed). Not a pg_dump.
 -- Covers: tables, constraints, functions, triggers, views, RLS policies.
+-- For an authoritative backup: pg_dump --schema-only --no-owner <connection-string>
 
 -- ===================== TABLES =====================
 
@@ -102,6 +101,22 @@ CREATE TABLE bear_history (
   active boolean DEFAULT true,
   created_at timestamp with time zone DEFAULT now(),
   featured boolean DEFAULT false
+);
+
+CREATE TABLE bear_regions (
+  id bigint NOT NULL,
+  region text NOT NULL,
+  scope text DEFAULT 'country'::text,
+  organizing_style text,
+  gathering_pattern text,
+  primary_platforms text,
+  research_sources text,
+  safety_note text,
+  discovery_note text,
+  active boolean DEFAULT true,
+  updated_at timestamp with time zone DEFAULT now(),
+  payment_rails text,
+  language text
 );
 
 CREATE TABLE campaigns (
@@ -469,6 +484,17 @@ CREATE TABLE newsletter_subscribers (
   hide_flag_codes text[] DEFAULT ARRAY[]::text[]
 );
 
+CREATE TABLE operating_costs (
+  id bigint NOT NULL,
+  label text NOT NULL,
+  amount_usd numeric NOT NULL DEFAULT 0,
+  cadence text NOT NULL DEFAULT 'monthly'::text,
+  category text,
+  note text,
+  active boolean NOT NULL DEFAULT true,
+  updated_at timestamp with time zone DEFAULT now()
+);
+
 CREATE TABLE operational_ledger (
   id bigint NOT NULL,
   tx_hash text,
@@ -721,7 +747,7 @@ CREATE TABLE watched_feeds (
   created_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
--- ===================== CONSTRAINTS (PK / FK / UNIQUE / CHECK) =====================
+-- ===================== CONSTRAINTS =====================
 
 ALTER TABLE inclusion_flags ADD CONSTRAINT inclusion_flags_pkey PRIMARY KEY (id);
 ALTER TABLE inclusion_flags ADD CONSTRAINT inclusion_flags_code_key UNIQUE (code);
@@ -807,6 +833,8 @@ ALTER TABLE candidate_events ADD CONSTRAINT candidate_events_pkey PRIMARY KEY (i
 ALTER TABLE candidate_events ADD CONSTRAINT candidate_events_source_url_key UNIQUE (source_url);
 ALTER TABLE candidate_events ADD CONSTRAINT candidate_events_feed_id_fkey FOREIGN KEY (feed_id) REFERENCES watched_feeds(id);
 ALTER TABLE watched_feeds ADD CONSTRAINT watched_feeds_feed_type_check CHECK ((feed_type = ANY (ARRAY['rss'::text, 'ical'::text, 'ical-static'::text, 'eventbrite'::text, 'scrape'::text])));
+ALTER TABLE operating_costs ADD CONSTRAINT operating_costs_pkey PRIMARY KEY (id);
+ALTER TABLE bear_regions ADD CONSTRAINT bear_regions_pkey PRIMARY KEY (id);
 
 -- ===================== FUNCTIONS =====================
 
@@ -1399,6 +1427,18 @@ CREATE OR REPLACE VIEW current_title_holders AS  SELECT th.id,
      LEFT JOIN competitions comp ON ((th.competition_id = comp.id)))
   WHERE (th.active = true);
 
+CREATE OR REPLACE VIEW competitions_missing_holders AS  SELECT id,
+    name,
+    scope,
+    country,
+    city,
+    website,
+    founded_year
+   FROM competitions c
+  WHERE ((active = true) AND (NOT (EXISTS ( SELECT 1
+           FROM title_holders th
+          WHERE ((th.competition_id = c.id) OR (th.title_name = c.name))))));
+
 -- ===================== RLS POLICIES =====================
 
 CREATE POLICY "Public read stories" ON stories AS PERMISSIVE FOR SELECT TO public USING (true);
@@ -1436,7 +1476,9 @@ CREATE POLICY "Public read proposal_votes" ON proposal_votes AS PERMISSIVE FOR S
 CREATE POLICY "Public read documents" ON documents AS PERMISSIVE FOR SELECT TO public USING ((active = true));
 CREATE POLICY "Public read code" ON code AS PERMISSIVE FOR SELECT TO public USING ((active = true));
 CREATE POLICY "Public read document_archive" ON document_archive AS PERMISSIVE FOR SELECT TO public USING (true);
+CREATE POLICY operating_costs_public_read ON operating_costs AS PERMISSIVE FOR SELECT TO public USING (true);
 CREATE POLICY public_read ON future_ideas AS PERMISSIVE FOR SELECT TO public USING ((active = true));
 CREATE POLICY public_upvote ON future_ideas AS PERMISSIVE FOR UPDATE TO public USING ((active = true)) WITH CHECK ((active = true));
 CREATE POLICY "public read watched_feeds" ON watched_feeds AS PERMISSIVE FOR SELECT TO public USING (true);
 CREATE POLICY "public read candidates" ON candidate_events AS PERMISSIVE FOR SELECT TO public USING (true);
+CREATE POLICY bear_regions_public_read ON bear_regions AS PERMISSIVE FOR SELECT TO public USING (true);
