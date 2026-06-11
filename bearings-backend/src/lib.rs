@@ -23,6 +23,7 @@ pub mod i18n;
 pub mod ui;
 pub mod ssr;
 pub mod llms;
+pub mod mcp;
 
 use axum::{Router, routing::{get, post}};
 use tower_http::cors::CorsLayer;
@@ -105,6 +106,7 @@ pub fn build_app(db: db::SupabaseClient) -> Router {
         .route("/llms.txt",                      get(llms::llms_txt))
         .route("/llms-full.txt",                 get(llms::llms_full_txt))
         .route("/robots.txt",                    get(llms::robots_txt))
+        .route("/mcp", post(mcp::mcp_handler).get(mcp::mcp_get))
         .route("/style.css",                     get(stylesheet_css))
         // ── Utility ─────────────────────────────────────────────
         .route("/health",                        get(health))

@@ -137,3 +137,28 @@ async fn legacy_coming_up_path_works() {
         "/coming-up returned {status} -- legacy path broken"
     );
 }
+
+
+// -- MCP server -----------------------------------------------------------------
+
+/// POST /mcp: initialize + tools/list. Neither hits the DB, so this proves the
+/// JSON-RPC dispatcher and the tool registry are wired correctly.
+#[tokio::test]
+async fn mcp_initialize_and_tools_list() {
+    let Some(server) = live_server() else { return; };
+
+    let init = server.post("/mcp").json(&serde_json::json!(
+        {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}})).await;
+    init.assert_status_ok();
+    let b: serde_json::Value = init.json();
+    assert_eq!(b["result"]["serverInfo"]["name"], "bearings");
+
+    let list = server.post("/mcp").json(&serde_json::json!(
+        {"jsonrpc":"2.0","id":2,"method":"tools/list"})).await;
+    list.assert_status_ok();
+    let b: serde_json::Value = list.json();
+    assert!(
+        b["result"]["tools"].as_array().is_some_and(|a| a.len() >= 5),
+        "expected >=5 MCP tools",
+    );
+}
