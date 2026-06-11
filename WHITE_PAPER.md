@@ -168,6 +168,9 @@ routes / ssr  →  services  →  repositories  →  db (Supabase PostgREST)
   (OnceLock, with English fallback); a small set of view helpers (`esc`/`card`/`split`/
   `badge`/`link_badge`) in `ui.rs` is the single source of HTML layout, composed by
   every zone rather than re-hand-rolled.
+- **Agent access (MCP):** a read-only Model Context Protocol server at `POST /mcp`
+  exposes the directory to AI agents as JSON-RPC tools, alongside `llms.txt` — so the
+  data is consumable by agents, not just humans.
 
 Supporting crates: `bearings-shared` (typed models), `bearings-agent` (treasury
 monitor and Bluesky publishing stubs), and `bearings-frontend` (a Leptos skeleton for

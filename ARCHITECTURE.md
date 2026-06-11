@@ -49,6 +49,7 @@ src/
                   unit-tested against in-memory Fakes with no network
   services/       business rules (e.g. vote_service: VoteOutcome enum + FakeVoteRepo)
   routes/         JSON REST handlers, one file per resource
+  mcp.rs          read-only MCP server (POST /mcp): JSON-RPC tools over the db layer
   ssr/
     mod.rs        Zone enum + Zone::parse(); the root() dispatcher
     query.rs      typed DB row structs (no serde_json::Value on the hot path)
@@ -76,6 +77,11 @@ Five patterns a reviewer may find worth stealing:
    view helpers (`split`/`badge`/`link_badge`). Zones compose these and never hand-roll
    the shared layout — but the helpers stop at the genuinely-shared seam: a bordered pill
    or a progress bar stays explicit in its zone rather than bloating a god-component.
+
+6. **Read-only MCP gateway.** `src/mcp.rs` exposes the directory to AI agents as MCP
+   tools (JSON-RPC at `POST /mcp`), each a safe PostgREST query through the same
+   `clause()` encoder the REST API uses. Hand-rolled, no SDK — the protocol-to-data
+   mapping is right there to read.
 
 ---
 

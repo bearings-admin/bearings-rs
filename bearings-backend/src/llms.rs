@@ -29,10 +29,11 @@ Bearings is a verified directory of the global gay bear community.
 - Clubs: community clubs and organising associations (49 clubs)
 - Title holders: competition winners 1992–present (80+ records, IBR complete)
 - Competitions: 32 active bear title competitions worldwide
-- Creators: musicians, filmmakers, illustrators, historians (35 verified)
-- Digital spaces: apps, Discord, podcasts, Twitch (26 spaces)
+- Creators: musicians, DJs, authors, illustrators, filmmakers, historians (46 verified)
+- Digital spaces: apps, Discord, podcasts, Twitch (35 spaces)
 - Bear history: community milestones 1987–present (49 records)
 - Campaigns: active charity fundraising (12 campaigns)
+- Shops: bear-owned shops, gear, and books by bear authors (24 shops)
 
 ## API endpoints
 GET /api/events            — all upcoming events (?country=X &month=September)
@@ -50,6 +51,12 @@ GET /api/campaigns         — active charity campaigns
 GET /api/treasury          — live Cardano treasury balances
 GET /api/bear-future       — community governance proposals
 GET /api/inclusion-flags   — CONST-10 inclusion flag reference
+
+## MCP server (for AI agents)
+A read-only Model Context Protocol server is live at POST /mcp (JSON-RPC over HTTP).
+Point any MCP client at https://srv1744879.hstgr.cloud/mcp to query the directory.
+Tools: search_events, list_places, current_title_holders, list_clubs, list_creators,
+list_campaigns, list_digital_spaces.
 
 ## Governance
 Community-governed. Token: NORTH (Cardano). 100 verified holders = full DAO.

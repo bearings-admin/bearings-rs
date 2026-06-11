@@ -62,6 +62,7 @@ src/
   main.rs            — router, port binding, middleware
   db.rs              — SupabaseClient (thin wrapper over reqwest)
   ui.rs              — design system: colour constants + HTML helpers
+  mcp.rs             read-only MCP server (POST /mcp, JSON-RPC over HTTP)
   ssr/               — server-side rendered HTML (the current web UI)
     mod.rs           — ZoneQuery, Zone enum, dispatcher, legacy wrappers
     zones/           — one file per zone
@@ -91,6 +92,16 @@ Every link in the HTML works without JavaScript. HTMX enhances navigation progre
 
 **Design system:** All colour constants and HTML helpers live in `src/ui.rs`.
 Each zone file starts with `use crate::ui::*;` to get them in scope.
+
+**MCP server:** `POST /mcp` exposes the directory to AI agents as read-only MCP
+tools (JSON-RPC over Streamable HTTP) — `search_events`, `list_places`,
+`current_title_holders`, `list_clubs`, `list_creators`, `list_campaigns`,
+`list_digital_spaces`. Hand-rolled in `src/mcp.rs`, no SDK dependency. Connect a
+client:
+
+```
+claude mcp add --transport http bearings https://srv1744879.hstgr.cloud/mcp
+```
 
 ### bearings-frontend (Phase 3)
 
