@@ -3,7 +3,7 @@
 **Project:** Bearings — global gay bear community infrastructure  
 **Steward:** ursasteward@pm.me  
 **Repo:** github.com/bearings-admin/bearings-rs  
-**Updated:** 2026-06-10
+**Updated:** 2026-06-11
 
 This file is loaded automatically by Claude Code at session start. It replaces the `documents` table in Supabase as the canonical agent directive.
 
@@ -27,7 +27,7 @@ A verified living directory of bear events, places, clubs, title holders, creato
 |-------|--------|
 | Database | Supabase PostgreSQL — project `mntdhflffhrjjvipxgyl` (ca-central-1) |
 | Backend | Rust/Axum — bearings-rs workspace on `srv1744879.hstgr.cloud` (Ubuntu 24.04, Hostinger) |
-| Live URL | https://srv1744879.hstgr.cloud — TLS via Hostinger Let's Encrypt |
+| Live URL | https://srv1744879.hstgr.cloud — Caddy reverse proxy + Let's Encrypt → localhost:3000 |
 | VPS path | `/opt/bearings-rs/` — workspace root |
 | SSH | `ssh root@2.25.191.141` (key: `~/.ssh/id_ed25519`) |
 | Deploy | `systemctl restart bearings-backend` after `cargo build --release` |
@@ -49,28 +49,36 @@ bearings-rs/
 
 ```
 src/
-  main.rs          — build_app() + route table (all routes inline, clearly grouped)
-  db.rs            — SupabaseClient: get_json<T>, post_rpc, write_json_returning
-  ui.rs            — design system: BROWN/ORANGE/GOLD/TAN/OFF_WHITE/DARK/MID + helpers
+  lib.rs           — owns all modules + build_app(); the library crate
+  main.rs          — thin binary: env -> config -> serve
+  db.rs            — SupabaseClient: get_json<T> (TTL-cached), post_rpc, write_json
+  cache.rs         — 30s TTL cache fronting get_json (url -> raw JSON body)
   config.rs        — all env vars validated at startup
-  error.rs         — AppError → HTTP response
-  middleware.rs    — privacy enforcement (CONST-6)
+  error.rs         — AppError -> HTTP response
+  middleware.rs    — privacy enforcement (CONST-6: criminalised-country list)
   i18n.rs          — 842 EN/ES/FR keys baked at startup via OnceLock
-  llms.rs          — /llms.txt and /llms-full.txt for AI crawlers
-  tests.rs         — HTTP integration tests (30 tests, axum-test v15)
+  ui.rs            — design system + esc() HTML-escape; stylesheet() served at /style.css
+  llms.rs          — /llms.txt, /llms-full.txt, /robots.txt
   ssr/
-    mod.rs         — ZoneQuery, Zone enum + Zone::parse(), root() dispatcher, legacy wrappers
-    query.rs       — 18 typed DB row structs (EventRow, PlaceRow, CurrentHolder, etc.)
-    zones/         — 13 zone files: now, coming_up, archive, future, places, events,
-                     clubs, titles, creators, campaigns, ical, digital, admin
-  routes/          — JSON REST API handlers (one file per resource)
+    mod.rs         — ZoneQuery, Zone enum + Zone::parse(), root() dispatcher
+    query.rs       — typed DB row structs (EventRow, PlaceRow, CurrentHolder, ...)
+    zones/         — 13 zone renderers (now, coming_up, archive, future, places,
+                     events, clubs, titles, creators, campaigns, ical, digital, admin)
+  repositories/    — data access: trait + Supabase impl per resource (DIP);
+                     clause() percent-encodes filter values. 14 repos.
+  services/        — business logic; vote_service orchestrates voting
+  routes/          — thin JSON REST handlers; delegate to repositories
+tests/
+  api_tests.rs     — HTTP integration tests (axum-test) against build_app()
 ```
 
 **Key patterns:**
-- All Supabase reads: `db.get_json::<Vec<XxxRow>>(&url)` — typed, no `serde_json::Value`
-- Zone dispatch: `match Zone::parse(q.zone.as_deref().unwrap_or("now")) { Zone::Now => ... }`
-- Test suite: `cargo test -p bearings-backend --bin bearings-backend` — 30 tests, needs `SUPABASE_URL`
-- Unit tests (no env): `#[cfg(test)]` modules in `src/ssr/mod.rs` and `src/ssr/query.rs`
+- Layering: routes -> services -> repositories -> db (PostgREST). Handlers stay thin.
+- Typed reads via `db.get_json::<Vec<XxxRow>>(&url)` (no `serde_json::Value`); 30s TTL cache fronts it.
+- Zone dispatch: `match Zone::parse(...) { Zone::Now => ... }`
+- Security: `ui::esc()` on every rendered value (XSS); `repositories::clause()` encodes filter values (injection).
+- Tests: `cargo test -p bearings-backend --lib` (unit, no network) and `--test api_tests` (HTTP, needs `SUPABASE_URL`).
+- Architecture & decisions: `bearings-backend/ARCHITECTURE.md`. DB schema/portability: `supabase/`.
 
 **Design constants (all in ui.rs):**
 `BROWN #5C4033`, `ORANGE #D2691E`, `GOLD #D4A017`, `TAN #C8B89A`, `OFF_WHITE #F9F5F0`, `DARK #1A1A1A`, `MID #777777`
