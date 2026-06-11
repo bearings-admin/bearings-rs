@@ -1,44 +1,39 @@
+//! GET /api/events — events REST endpoints. Data access lives in
+//! `repositories::event_repo`; this layer only maps HTTP <-> repository.
 
+use std::collections::BTreeMap;
 use axum::extract::{Path, Query, State};
 use axum::Json;
 use bearings_shared::models::Event;
 use serde::Deserialize;
-use crate::{db::SupabaseClient, error::AppError};
+use crate::db::SupabaseClient;
+use crate::error::AppError;
+use crate::repositories::event_repo::{EventFilter, EventRepository, SupabaseEventRepository};
 
 #[derive(Deserialize)]
 pub struct EventsQuery {
-    pub country: Option<String>,
-    pub month: Option<String>,
-    /// event_type maps to the database `type` column
-    pub event_type: Option<String>,
-    pub limit: Option<u32>,
+    pub country:       Option<String>,
+    pub month:         Option<String>,
+    /// event_type maps to the database `type` column.
+    pub event_type:    Option<String>,
+    pub limit:         Option<u32>,
     pub upcoming_only: Option<bool>,
 }
 
-/// GET /api/events
-/// List active events. Default: all upcoming events ordered by start_date.
+/// GET /api/events — list active events, ordered by start date.
 pub async fn list(
     State(db): State<SupabaseClient>,
     Query(params): Query<EventsQuery>,
 ) -> Result<Json<Vec<Event>>, AppError> {
-    let limit = params.limit.unwrap_or(50).min(200); // cap at 200
-
-    let mut url = format!(
-        "{}/rest/v1/events?select=*&active=eq.true&order=start_date.asc&limit={}",
-        db.url, limit
-    );
-
-    if let Some(c) = params.country     { url.push_str(&format!("&country=eq.{}", c)); }
-    if let Some(m) = params.month       { url.push_str(&format!("&month=eq.{}", m)); }
-    if let Some(t) = params.event_type  { url.push_str(&format!("&type=eq.{}", t)); }
-
-    // upcoming_only: filter to events whose start_date >= today
-    if params.upcoming_only.unwrap_or(false) {
-        let today = chrono::Local::now().date_naive();
-        url.push_str(&format!("&start_date=gte.{}", today));
-    }
-
-    Ok(Json(db.get_json::<Vec<Event>>(&url).await?))
+    let repo = SupabaseEventRepository::new(db);
+    let events = repo.find(EventFilter {
+        country:       params.country,
+        month:         params.month,
+        event_type:    params.event_type,
+        upcoming_only: params.upcoming_only.unwrap_or(false),
+        limit:         params.limit.unwrap_or(50).min(200),
+    }).await?;
+    Ok(Json(events))
 }
 
 /// GET /api/events/:id
@@ -46,45 +41,29 @@ pub async fn get_one(
     State(db): State<SupabaseClient>,
     Path(id): Path<i64>,
 ) -> Result<Json<Event>, AppError> {
-    let url = format!(
-        "{}/rest/v1/events?select=*&id=eq.{}&limit=1",
-        db.url, id
-    );
-    let mut events: Vec<Event> = db.get_json(&url).await?;
-    events.pop()
-        .ok_or_else(|| AppError::NotFound(format!("Event {} not found", id)))
+    let repo = SupabaseEventRepository::new(db);
+    repo.find_by_id(id).await?
+        .ok_or_else(|| AppError::NotFound(format!("Event {id} not found")))
         .map(Json)
 }
 
-/// GET /api/events/by-month
-/// Returns event counts grouped by month — used for the timeline bar chart.
-/// Response: [{"month": "January", "count": 12}, ...]
+/// GET /api/events/by-month — event counts grouped by month, for the timeline bar.
+/// Response: `[{"month": "January", "count": 12}, ...]`
 pub async fn by_month(
     State(db): State<SupabaseClient>,
 ) -> Result<Json<Vec<MonthCount>>, AppError> {
-    let url = format!(
-        "{}/rest/v1/events?select=month&active=eq.true&month=not.is.null",
-        db.url
-    );
-    let events: Vec<MonthOnly> = db.get_json(&url).await?;
+    let repo = SupabaseEventRepository::new(db);
+    let months = repo.list_months().await?;
 
-    // Count by month in Rust rather than relying on a group-by RPC
-    let mut counts: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
-    for e in events {
-        if let Some(m) = e.month {
-            *counts.entry(m).or_insert(0) += 1;
-        }
+    let mut counts: BTreeMap<String, u32> = BTreeMap::new();
+    for m in months {
+        *counts.entry(m).or_insert(0) += 1;
     }
-
     let result = counts.into_iter()
         .map(|(month, count)| MonthCount { month, count })
         .collect();
-
     Ok(Json(result))
 }
-
-#[derive(Deserialize)]
-struct MonthOnly { month: Option<String> }
 
 #[derive(serde::Serialize)]
 pub struct MonthCount {

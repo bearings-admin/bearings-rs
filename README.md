@@ -1,73 +1,222 @@
+# Bearings
 
-# bearings-rs
+**Global bear community hub.** Events, venues, clubs, title holders, and more — worldwide.
 
-Rust backend for the Bearings global bear community platform.
+Live: `https://www.bearings.community` (currently at `https://srv750649.hstgr.cloud`)
 
-## Architecture
+---
 
-Four crates in one Cargo workspace:
+## What this is
 
-| Crate | Purpose | Status |
-|-------|---------|--------|
-| `bearings-shared` | Database model types. Shared across all crates. | Draft |
-| `bearings-backend` | Axum HTTP server. REST API + SSR + llms.txt. | Draft |
-| `bearings-agent` | Treasury monitor. Blockfrost + Supabase writer. | Draft |
-| `bearings-frontend` | Leptos WASM frontend. Replaces Lovable. | Planned |
+Bearings is a Rust monorepo with three active crates and one pending:
 
-## Getting Started
+| Crate | Role | Status |
+|-------|------|--------|
+| `bearings-shared` | Typed database models — shared across all crates | ✅ Active |
+| `bearings-backend` | Axum HTTP server — SSR + REST API | ✅ Active |
+| `bearings-agent` | Data pipeline — RSS/iCal feed ingestion | ✅ Active |
+| `bearings-frontend` | Leptos SSR + WASM frontend | 🔧 Phase 3 |
+
+---
+
+## Running locally
 
 ```bash
-# Clone
-git clone https://github.com/bearings-admin/bearings-rs
+git clone …
 cd bearings-rs
 
-# Configure
+# Copy environment config
 cp .env.example .env
-# Fill in: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,
-#          BLOCKFROST_PROJECT_ID, TREASURY_WALLET_ADDRESS, OPERATIONAL_WALLET_ADDRESS
+# Edit .env — needs SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, ADMIN_TOKEN
 
 # Run the backend
 cargo run -p bearings-backend
 
-# Run the treasury agent
-cargo run -p bearings-agent
+# Visit http://localhost:3000
 ```
 
-## Where the Code Lives
+The backend talks directly to Supabase via its REST API. No local database needed.
 
-The code in this repository is mirrored to the Bearings Supabase database in the `code` table.
-Any Claude session can query it:
+---
 
-```sql
-SELECT file_path, content
-FROM code
-WHERE crate = 'bearings-backend'
-AND active = true
-ORDER BY file_path;
+## Architecture
+
+### bearings-shared
+
+The single source of truth for the database schema in Rust. Every crate imports from here.
+
+```
+bearings-shared/src/
+  models.rs   — Event, Place, Club, TitleHolder, Competition, Campaign, ...
+  enums.rs    — EventType, PlaceType, PlaceType, ProposalStatus, ...
 ```
 
-This means agents can read, understand, and propose changes to the codebase even without
-GitHub access. The database is the source of truth.
+**If you touch the Supabase schema, update `models.rs` first.**
 
-## For Gaspar
+### bearings-backend
 
-The interesting files for your first review:
-- `bearings-shared/src/models.rs` — does the schema mapping look correct?
-- `bearings-agent/src/blockfrost.rs` — is the Cardano integration approach right?
-- `bearings-agent/src/treasury.rs` — any issues with the monitoring loop?
+An Axum server. Two parallel sets of handlers:
 
-No maintenance obligation. Review at your own pace.
+```
+src/
+  main.rs            — router, port binding, middleware
+  db.rs              — SupabaseClient (thin wrapper over reqwest)
+  ui.rs              — design system: colour constants + HTML helpers
+  ssr/               — server-side rendered HTML (the current web UI)
+    mod.rs           — ZoneQuery, Zone enum, dispatcher, legacy wrappers
+    zones/           — one file per zone
+      now.rs         — hot events + campaigns + title holders
+      coming_up.rs   — trip planner (events by country/season)
+      archive.rs     — bear history timeline
+      future.rs      — BEAR FUTURE treasury + governance
+      places.rs      — venues directory
+      titles.rs      — competition archive + title holders
+      clubs.rs       — bear clubs directory
+      creators.rs    — content creators
+      campaigns.rs   — community fundraising
+      digital.rs     — digital spaces
+      ical.rs        — iCal export info
+      admin.rs       — feed candidate review (token-gated)
+  routes/            — JSON REST API (consumed by mobile/frontend)
+    now.rs           — GET /api/now
+    coming_up.rs     — GET /api/coming-up
+    events.rs        — GET /api/events
+    places.rs        — GET /api/places
+    titles.rs        — GET /api/title-holders
+    ...
+```
+
+**Routing model:** `GET /` with `?zone=<name>` dispatches to the correct zone.
+Every link in the HTML works without JavaScript. HTMX enhances navigation progressively.
+
+**Design system:** All colour constants and HTML helpers live in `src/ui.rs`.
+Each zone file starts with `use crate::ui::*;` to get them in scope.
+
+### bearings-frontend (Phase 3)
+
+The Leptos frontend is stubbed out and ready for activation:
+
+```
+bearings-frontend/src/
+  lib.rs                 — App component, Shell, Nav
+  components/
+    now.rs               — NowPage + EventCard (server function wired to /api/now)
+    coming_up.rs         — ComingUpPage placeholder
+```
+
+The server functions in `now.rs` call the same Supabase REST API that `ssr/zones/now.rs` uses.
+Phase 3 is: wire up the remaining server functions → activate hydration → deprecate `ssr/`.
+
+---
+
+## The migration path (SSR → Leptos)
+
+```
+Phase 1 (done): Axum SSR — zone functions return Html<String>
+Phase 2 (done): Type safety — Zone enum, typed models, bearings-shared
+Phase 3 (next): Leptos SSR — replace zone functions with Leptos components
+Phase 4:        WASM hydration — add wasm32-unknown-unknown target, cargo-leptos
+```
+
+Each `ssr/zones/X.rs` maps to a Leptos component in `bearings-frontend/src/components/X.rs`.
+The JSON API in `routes/` is what the Leptos components will call.
+
+---
+
+## Database
+
+Supabase (PostgreSQL) via PostgREST REST API. No ORM. Queries are explicit strings in the route handlers.
+
+Key tables: `events`, `places`, `clubs`, `title_holders`, `competitions`, `campaigns`, `watched_feeds`, `candidate_events`
+
+Key views: `current_title_holders` (deduplicated, one row per title, scope pre-joined)
+
+The Supabase project is at `mntdhflffhrjjvipxgyl.supabase.co`.
+
+---
+
+## Data pipeline
+
+A Python script (`scripts/feed_reader.py`) runs nightly via systemd:
+
+```
+bearings-feeds.timer — fires at 02:04 UTC
+→ feed_reader.py    — fetches all active watched_feeds
+→ candidate_events  — new events land here with status='pending'
+→ /?zone=admin      — steward reviews and approves
+```
+
+Feed types: `rss`, `ical`, `ical-static` (annual URL refresh needed each January).
+See `RESEARCH_DIRECTIVE.md` for the full tiered data collection strategy.
+
+---
+
+## Adding a zone
+
+1. Create `src/ssr/zones/my_zone.rs`:
+   ```rust
+   use axum::response::{Html, IntoResponse, Response};
+   use crate::{db::SupabaseClient, ui::*};
+   
+   pub(crate) async fn zone_my_zone(db: SupabaseClient, lang: &str) -> Response {
+       // fetch from Supabase, build HTML, call shell()
+       Html(shell("My Zone", "Description.", "my-zone", &body, lang)).into_response()
+   }
+   ```
+
+2. Add `pub mod my_zone;` to `src/ssr/zones/mod.rs`
+
+3. Add `Zone::MyZone` to the `Zone` enum in `src/ssr/mod.rs` and wire it in `root()`
+
+4. Add `use zones::my_zone::zone_my_zone;` to `src/ssr/mod.rs`
+
+---
+
+## Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_ANON_KEY` | Public read key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Write key (feed ingestion, admin) |
+| `ADMIN_TOKEN` | Token for `/?zone=admin` |
+| `PORT` | Server port (default: 3000) |
+| `RUST_LOG` | Log level (e.g. `bearings_backend=debug`) |
+
+---
 
 ## Deployment
 
-The backend and agent run as systemd services on a Hostinger VPS.
-See `deploy.sh` and `bearings-agent/deploy/bearings-agent.service`.
+Single binary on a Hostinger VPS (`srv750649.hstgr.cloud`):
 
-## Design Philosophy
+```bash
+# Build release binary
+cargo build -p bearings-backend --release
 
-Follows Gaspar's approach from srv750649.hstgr.cloud:
-- Minimal, explicit routing — no magic
-- Axum for the web layer, tokio for async
-- Direct Supabase REST calls — no ORM
-- The shared types crate as the single source of schema truth
-- Secrets only in .env, never in code
+# Copy to VPS
+scp target/release/bearings-backend user@vps:/opt/bearings-rs/bearings-backend.bin
+
+# Restart service
+ssh user@vps systemctl restart bearings-backend
+```
+
+Systemd service: `bearings-backend.service`  
+TLS: Let's Encrypt via Hostinger auto-provisioning (expires Aug 2026)
+
+---
+
+## Frontend decision
+
+The frontend crate uses **Leptos 0.6** (SSR feature, no WASM compilation required initially).
+
+Leptos was chosen because it follows the same component model as Yew but with:
+- Fine-grained signals instead of virtual DOM diffing
+- `leptos_axum` for first-class Axum integration
+- Better server function support (typed, async, serialized via serde)
+
+To activate the full WASM hydration pipeline:
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install cargo-leptos
+cargo leptos build
+```

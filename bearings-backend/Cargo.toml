@@ -22,7 +22,16 @@ chrono = { workspace = true }
 dotenvy = { workspace = true }
 
 urlencoding = { workspace = true }  # URL-encode query params in submissions dedup check
+async-trait  = { workspace = true }  # async fns in repository traits
+
+[lib]
+name = "bearings_backend"
+path = "src/lib.rs"
 
 [[bin]]
 name = "bearings-backend"
 path = "src/main.rs"
+
+[dev-dependencies]
+axum-test = "15"
+tokio = { workspace = true, features = ["full"] }

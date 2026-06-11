@@ -1,0 +1,39 @@
+[package]
+name = "bearings-frontend"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+# Server-side rendering — used for initial page load and SEO
+ssr = [
+    "leptos/ssr",
+    "leptos_meta/ssr",
+    "leptos_router/ssr",
+    "leptos_axum",
+    "dep:axum",
+    "dep:tokio",
+]
+# Client-side hydration — compiled to WASM
+hydrate = [
+    "leptos/hydrate",
+    "leptos_meta/hydrate",
+    "leptos_router/hydrate",
+]
+
+[dependencies]
+leptos = { version = "0.6", features = [] }
+leptos_meta = { version = "0.6", features = [] }
+leptos_router = { version = "0.6", features = [] }
+leptos_axum = { version = "0.6", optional = true }
+
+bearings-shared = { path = "../bearings-shared" }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+axum = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }

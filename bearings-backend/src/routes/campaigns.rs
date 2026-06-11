@@ -1,8 +1,11 @@
+//! GET /api/campaigns. Data access in `repositories::campaign_repo`.
 
 use axum::{extract::{Query, State}, Json};
 use bearings_shared::models::Campaign;
 use serde::Deserialize;
-use crate::{db::SupabaseClient, error::AppError};
+use crate::db::SupabaseClient;
+use crate::error::AppError;
+use crate::repositories::campaign_repo::{CampaignFilter, CampaignRepository, SupabaseCampaignRepository};
 
 #[derive(Deserialize)]
 pub struct CampaignsQuery {
@@ -14,16 +17,9 @@ pub async fn list(
     State(db): State<SupabaseClient>,
     Query(params): Query<CampaignsQuery>,
 ) -> Result<Json<Vec<Campaign>>, AppError> {
-    let include_archived = params.include_archived.unwrap_or(false);
-    let mut url = format!(
-        "{}/rest/v1/campaigns?select=*&order=active.desc,name.asc",
-        db.url
-    );
-    if !include_archived {
-        url.push_str("&active=eq.true");
-    }
-    // Never expose campaigns with privacy_mode in the public list
-    url.push_str("&privacy_mode=eq.false");
-
-    Ok(Json(db.get_json::<Vec<Campaign>>(&url).await?))
+    let repo = SupabaseCampaignRepository::new(db);
+    let campaigns = repo.find(CampaignFilter {
+        include_archived: params.include_archived.unwrap_or(false),
+    }).await?;
+    Ok(Json(campaigns))
 }

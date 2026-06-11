@@ -4,7 +4,7 @@ members = [
     "bearings-shared",
     "bearings-backend",
     "bearings-agent",
-    # "bearings-frontend",  # Leptos frontend — added when Phase 3 begins
+    "bearings-frontend",  # Leptos SSR frontend — Phase 3
 ]
 resolver = "2"
 
@@ -47,6 +47,9 @@ dotenvy = "0.15"
 
 # URL encoding for query params
 urlencoding = "2"
+
+# Async methods in traits (repository abstraction)
+async-trait = "0.1"
 
 # Release profile — small, fast binaries for VPS deployment
 [profile.release]

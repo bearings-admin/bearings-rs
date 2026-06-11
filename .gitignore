@@ -22,3 +22,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# stray compiled binary (build output)
+bearings-backend.bin
+*.bin
+*.bak
