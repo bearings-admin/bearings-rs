@@ -181,6 +181,7 @@ pub fn translations() -> &'static I18nStore {
         en.insert("nav.campaigns", "Campaigns");
         en.insert("nav.clubs", "Clubs");
         en.insert("nav.creators", "Creators");
+        en.insert("nav.shops", "Shops");
         en.insert("nav.culture", "Culture");
         en.insert("nav.culture.creators", "Creators");
         en.insert("nav.culture.media", "Media & Art");
@@ -470,6 +471,7 @@ pub fn translations() -> &'static I18nStore {
         es.insert("nav.campaigns", "Campañas");
         es.insert("nav.clubs", "Clubs");
         es.insert("nav.creators", "Creadores");
+        es.insert("nav.shops", "Tiendas");
         es.insert("nav.culture", "Cultura");
         es.insert("nav.culture.creators", "Creadores");
         es.insert("nav.culture.media", "Medios y Arte");
@@ -746,6 +748,7 @@ pub fn translations() -> &'static I18nStore {
         fr.insert("nav.campaigns", "Campagnes");
         fr.insert("nav.clubs", "Clubs");
         fr.insert("nav.creators", "Créateurs");
+        fr.insert("nav.shops", "Boutiques");
         fr.insert("nav.culture", "Culture");
         fr.insert("nav.culture.creators", "Créateurs");
         fr.insert("nav.culture.media", "Médias et Art");
@@ -868,6 +871,7 @@ pub fn translations() -> &'static I18nStore {
         ja.insert("nav.campaigns", "キャンペーン");
         ja.insert("nav.clubs", "クラブ");
         ja.insert("nav.creators", "クリエイター");
+        ja.insert("nav.shops", "ショップ");
         ja.insert("nav.culture", "カルチャー");
         ja.insert("nav.culture.creators", "クリエイター");
         ja.insert("nav.culture.media", "メディア");

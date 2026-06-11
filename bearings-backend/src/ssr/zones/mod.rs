@@ -20,6 +20,7 @@ pub mod events;
 pub mod clubs;
 pub mod titles;
 pub mod creators;
+pub mod shops;
 pub mod campaigns;
 pub mod ical;
 pub mod digital;

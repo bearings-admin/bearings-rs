@@ -77,6 +77,7 @@ pub(crate) fn shell(title: &str, description: &str, active: &str, body: &str, la
         ("places",        "🍺", "nav.places"),
         ("clubs",         "🏳\u{fe0f}", "nav.clubs"),
         ("creators",      "🎨", "nav.creators"),
+        ("shops",         "\u{1f6cd}\u{fe0f}", "nav.shops"),
         ("titles",        "🏆", "nav.titles"),
         ("campaigns",     "💚", "nav.campaigns"),
         ("digital-spaces","📱", "nav.digital"),
@@ -252,6 +253,37 @@ pub(crate) fn stylesheet() -> &'static str {
 
 pub(crate) fn card(c: &str) -> String {
     format!("<div class=\"card\">{c}</div>")
+}
+
+/// One row of an entity card: main content on the left (it flexes to fill), a small
+/// action or aside pinned to the right. Every zone builds its card body from this, so
+/// the row layout is defined in exactly one place.
+///
+/// Deliberately minimal: it does *not* try to model the whole card. Per-zone specifics
+/// (a progress bar, a media list, a bordered "ships worldwide" pill) stay in the zone.
+/// The shared seam is only the part that was genuinely identical everywhere.
+pub(crate) fn split(content: &str, aside: &str) -> String {
+    format!(
+        "<div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:10px\">\
+           <div style=\"flex:1;min-width:0\">{content}</div>{aside}\
+         </div>"
+    )
+}
+
+/// A static pill (the `.badge` CSS class). `label` is escaped; `bg`/`fg` are trusted
+/// colour constants from this module.
+pub(crate) fn badge(label: &str, bg: &str, fg: &str) -> String {
+    format!("<span class=\"badge\" style=\"background:{bg};color:{fg}\">{}</span>", esc(label))
+}
+
+/// A clickable pill that always opens safely in a new tab. `href` must already be
+/// escaped/trusted (callers build it from `esc(...)`); `label` is escaped here.
+pub(crate) fn link_badge(href: &str, label: &str, bg: &str) -> String {
+    format!(
+        "<a href=\"{href}\" target=\"_blank\" rel=\"noopener\" class=\"badge\" \
+           style=\"background:{bg};color:#fff\">{}</a>",
+        esc(label)
+    )
 }
 
 pub(crate) fn country_region(country: &str) -> &'static str {

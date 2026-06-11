@@ -19,6 +19,7 @@ use zones::events::zone_events;
 use zones::clubs::zone_clubs;
 use zones::titles::zone_titles;
 use zones::creators::zone_creators;
+use zones::shops::zone_shops;
 use zones::campaigns::zone_campaigns;
 use zones::ical::zone_ical;
 use zones::digital::zone_digital;
@@ -56,7 +57,7 @@ pub struct ZoneQuery {
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Zone {
     Now, ComingUp, Archive, Future,
-    Places, Events, Clubs, Titles, Creators,
+    Places, Events, Clubs, Titles, Creators, Shops,
     Campaigns, DigitalSpaces, Ical, Admin, History, Transparency,
     Unknown,
 }
@@ -73,6 +74,7 @@ impl Zone {
             "clubs"          => Self::Clubs,
             "titles"         => Self::Titles,
             "creators"       => Self::Creators,
+            "shops"          => Self::Shops,
             "campaigns"      => Self::Campaigns,
             "digital-spaces" => Self::DigitalSpaces,
             "ical"           => Self::Ical,
@@ -101,6 +103,7 @@ pub async fn root(
         Zone::Clubs         => zone_clubs(db, lang_owned).await,
         Zone::Titles        => zone_titles(db, lang_owned).await,
         Zone::Creators      => zone_creators(db, lang_owned).await,
+        Zone::Shops         => zone_shops(db, lang_owned).await,
         Zone::Campaigns     => zone_campaigns(db, lang_owned).await,
         Zone::DigitalSpaces => zone_digital(db, lang_owned).await,
         Zone::Ical          => zone_ical(lang_owned).await,
@@ -145,6 +148,7 @@ mod tests {
             ("clubs",          Zone::Clubs),
             ("titles",         Zone::Titles),
             ("creators",       Zone::Creators),
+            ("shops",          Zone::Shops),
             ("campaigns",      Zone::Campaigns),
             ("digital-spaces", Zone::DigitalSpaces),
             ("ical",           Zone::Ical),

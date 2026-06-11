@@ -1,7 +1,7 @@
 
 # bearings-rs — Architectural Alignment
 
-**Last reviewed:** 2026-06-07
+**Last reviewed:** 2026-06-11
 **Purpose:** This document maps the white paper's stated architecture against
 what is actually in the database and the Rust code. It is the zoom-out view.
 Read DESIGN.md for implementation detail. Read this to understand coherence.
@@ -21,6 +21,61 @@ RUST CODE (bearings-rs — 57 files, 4 crates)
 The database is more advanced than the Rust code in several areas.
 The Rust code has more deployment infrastructure than the database has security.
 The white paper is broadly accurate but predates some DB evolution.
+
+---
+
+## Code Map & Patterns (for reviewers) — updated 2026-06-11
+
+Layering (also stated at the top of `lib.rs`):
+
+```
+routes / ssr  ->  repositories  ->  db::SupabaseClient  ->  Supabase PostgREST
+```
+
+```
+src/
+  lib.rs          build_app() — router + middleware, extracted so tests need no port
+  main.rs         thin binary: env -> config -> serve
+  config.rs       all env vars validated once at startup
+  db.rs           SupabaseClient (typed get_json<T>); the //! header documents the
+                  PostgREST-vs-Diesel/SQLx tradeoff honestly — start there
+  cache.rs        30s TTL read-through cache fronting get_json (warm reads ~0.5ms)
+  error.rs        AppError -> HTTP response
+  middleware.rs   privacy enforcement (CONST-6)
+  i18n.rs         EN/ES/FR/JA baked at startup via OnceLock; t() falls back to EN
+  ui.rs           design system + SSR view helpers (esc, card, sh, split, badge,
+                  link_badge) — the only place HTML layout lives
+  repositories/   one trait + Supabase impl per resource (Dependency Inversion),
+                  unit-tested against in-memory Fakes with no network
+  services/       business rules (e.g. vote_service: VoteOutcome enum + FakeVoteRepo)
+  routes/         JSON REST handlers, one file per resource
+  ssr/
+    mod.rs        Zone enum + Zone::parse(); the root() dispatcher
+    query.rs      typed DB row structs (no serde_json::Value on the hot path)
+    zones/        16 server-rendered zones, one file each
+```
+
+Five patterns a reviewer may find worth stealing:
+
+1. **Typo-proof routing.** `ssr/mod.rs` has a `Zone` enum with an exhaustive match in
+   `root()`; the test `zone_parse_all_known` is a registry — add a zone, add a line, or
+   the test fails. No stringly-typed dispatch that silently 404s.
+
+2. **Repository trait + Fake.** Every resource is a trait with a Supabase impl; services
+   depend on the trait, so unit tests run against an in-memory Fake with zero network
+   (`services/` + `repositories/`). DIP that is actually wired to tests, not decoration.
+
+3. **Typed rows over `Value`.** `query.rs` decodes PostgREST JSON into named structs via
+   `db.get_json::<Vec<Row>>()`. The compiler, not a runtime key lookup, guards fields.
+
+4. **Honest data layer.** `db.rs`'s header explains *why* PostgREST here (no migration
+   ownership in-app, RLS at the edge, one HTTP round-trip dominates latency) instead of
+   pretending the choice was free; `cache.rs` then makes warm reads ~0.5ms.
+
+5. **One place for HTML.** `ui.rs` owns `esc()` (XSS), the palette, and the composable
+   view helpers (`split`/`badge`/`link_badge`). Zones compose these and never hand-roll
+   the shared layout — but the helpers stop at the genuinely-shared seam: a bordered pill
+   or a progress bar stays explicit in its zone rather than bloating a god-component.
 
 ---
 

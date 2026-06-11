@@ -157,6 +157,7 @@ pub(crate) struct MediaRow {
     pub year:           Option<i32>,
     pub link:           Option<String>,
     pub streaming_link: Option<String>,
+    pub affiliate_link: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -169,6 +170,8 @@ pub(crate) struct StoreRow {
     pub bear_owned:     Option<bool>,
     pub size_inclusive: Option<bool>,
     pub ships_global:   Option<bool>,
+    pub affiliate_link: Option<String>,
+    pub affiliate_pct:  Option<f64>,
 }
 
 // ── Digital Spaces ────────────────────────────────────────────────────────────
@@ -184,6 +187,8 @@ pub(crate) struct DigitalSpaceRow {
     pub tiktok_handle:   Option<String>,
     pub bluesky_handle:  Option<String>,
     pub youtube_handle:  Option<String>,
+    pub id:      Option<i64>,
+    pub country: Option<String>,
 }
 
 // ── Bear History ──────────────────────────────────────────────────────────────

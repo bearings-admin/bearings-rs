@@ -1,6 +1,6 @@
 # Bearings White Paper
 
-**Version:** 0.9  **Date:** June 2026  **Status:** Current — governance model under active discussion
+**Version:** 0.10  **Date:** June 2026  **Status:** Current — governance model under active discussion
 
 Bearings is global infrastructure for the gay bear community: a verified, living
 directory and coordination layer for events, places, clubs, title holders,
@@ -36,13 +36,21 @@ Four zones on a temporal spine:
   new bear territories (with ILGA safety context), and community-upvoted ideas.
 
 **Navigation:** four-icon bottom nav (pure CSS, no JS), a hamburger directory drawer,
-and an EN/ES/FR language switcher carried through every link. Interface text is
+and an EN/ES/FR/JA language switcher carried through every link. Interface text is
 translated at startup; community data uses the browser's `lang` attribute for
 on-the-fly translation.
 
+**Directory zones** (via the drawer): Places, Clubs, Title Holders, Campaigns and
+Digital Spaces, plus two creator-facing zones — **Creators**, grouped by craft
+(musicians, DJs, authors, illustrators, filmmakers, performers), where authors list
+their books; and **Shops**, bear-owned shops and community gear, kept a separate zone
+so commerce never crowds the directory.
+
 **Data as of June 2026:** 88 events, 173 places (saunas, bars, campgrounds, leather
-bars), 49 clubs, 33 competitions, 93 title holders, 58 history entries, 35 creators,
-33 digital spaces, 11 campaigns, ~1,190 translation rows.
+bars), 49 clubs, 33 competitions, 135 title holders, 58 history entries, 46 creators
+(incl. international DJs and authors), 24 bear shops, 11 books, 35 digital spaces,
+12 campaigns, 10 in-language bear-region profiles, ~1,190 translation rows across
+four baked languages (EN/ES/FR/JA).
 
 ---
 
@@ -69,12 +77,31 @@ without disrupting operations.
 
 ## §4 Treasury and Finance
 
-Today the steward holds all operational credentials; there is no on-chain treasury.
-An `operational_ledger` table tracks income and costs for transparency. Under Path B,
-a two-wallet Cardano model (Community Treasury + Operational) would phase in from
-manual steward control through multi-sig to governance-triggered and eventually
-autonomous (x402) payments — with the agent never holding private keys until the
-final phase. Affiliate links are disclosed and logged under either path.
+Today the steward holds all operational credentials and there is no on-chain
+treasury; an `operational_ledger` records income and costs, and a **Transparency**
+zone publishes operating costs, runway, and (once funded) the wallet balance.
+
+**Near-term operational wallet (decided, pending setup with a second steward).** A
+self-custodial wallet on **Base** (Coinbase's Ethereum L2) holding USDC, used to pay
+infrastructure invoices (e.g. Hostinger) **manually via CoinGate**. The shape follows
+from CONST-2 (no single point of human failure):
+
+- A standard signer wallet (EOA) holds a small operating balance and settles invoices
+  one at a time. A solo signer is the only sensible start — a single-owner multi-sig
+  is all friction and no benefit.
+- When a second steward joins (Gaspar or a backup), the treasury proper becomes a
+  **Safe** smart-account **multi-sig** (e.g. 2-of-3) holding the runway. A Safe is a
+  vault controlled by the stewards' signer wallets — recoverable by any authorised
+  steward and auditable on-chain, which is exactly what CONST-2 asks for.
+- **Affiliate and contribution income** is recorded in `operational_ledger`
+  (`direction = in`) and shown against costs on the Transparency zone. Affiliates pay
+  in fiat, so income reaches the wallet only as an explicit, logged conversion step —
+  the ledger is the record, the wallet is the proof.
+- **The agent never holds private keys.** Payments are manual and steward-authorised.
+
+The Cardano two-wallet model and the NORTH governance token remain the **Path B**
+option (§3), activatable later without disrupting this setup. Auto-renewing crypto
+payments would need a crypto debit card and are out of scope for now.
 
 ---
 
@@ -90,6 +117,14 @@ Competition archive completeness: IBR (San Francisco, 1992–2011) complete; NAB
 mostly complete; Mr Bear International (2024–) complete; Mr Bear UK and Mr TBRU partial,
 outreach pending.
 
+**Commerce and affiliates (CONST-5).** Two link types, always disclosed. Bear-owned
+shops and direct sellers are linked **directly** — no skim. Marketplace products
+(currently books on Amazon) carry **affiliate links** shown with a plain-language
+disclosure that a small percentage funds Bearings at no extra cost to the reader;
+books are listed under their author in the Creators zone. Affiliate links only earn
+once the steward's marketplace account (e.g. Amazon Associates) is connected — until
+then they are ordinary product links.
+
 ---
 
 ## §6 Research and Data Collection
@@ -104,8 +139,8 @@ insert a record without a source.
 
 ## §7 Technical Stack
 
-**Phase 1 (live):** a Lovable React frontend (`bearings.lovable.app`) over Supabase
-PostgreSQL — the original rapid-start UI.
+**Phase 1 (retired):** a Lovable React prototype over Supabase PostgreSQL — the
+original rapid-start UI, since superseded by Phase 2.
 
 **Phase 2 (live):** the `bearings-rs` Rust workspace on a Hostinger VPS, served over
 HTTPS at `https://srv1744879.hstgr.cloud/` (Caddy reverse proxy + automatic Let's
@@ -129,6 +164,10 @@ routes / ssr  →  services  →  repositories  →  db (Supabase PostgREST)
   page loads skip the network round-trip entirely (≈45 ms → ≈0.5 ms).
 - **Security:** every rendered value is HTML-escaped (XSS-safe), including
   public-submitted content.
+- **Interface i18n & view layer:** EN, ES, FR and JA are compiled in at startup
+  (OnceLock, with English fallback); a small set of view helpers (`esc`/`card`/`split`/
+  `badge`/`link_badge`) in `ui.rs` is the single source of HTML layout, composed by
+  every zone rather than re-hand-rolled.
 
 Supporting crates: `bearings-shared` (typed models), `bearings-agent` (treasury
 monitor and Bluesky publishing stubs), and `bearings-frontend` (a Leptos skeleton for
@@ -145,8 +184,9 @@ Design decisions and benchmarks — including Axum vs Rocket, PostgREST vs a dir
 Four live sections: **Bears Taking Action** (campaigns with progress bars),
 **Breaking Ground** (recent title holders, including historic firsts), **New Bear
 Territories** (regional safety reference via ILGA; notes on Malaysia, the Middle East,
-Eastern Europe), and **What Could Be** (community-upvoted ideas). A `bear_regions`
-table for per-region safety commentary is planned, pending steward content.
+Eastern Europe), and **What Could Be** (community-upvoted ideas). A `bear_regions` table
+now carries per-region organising, payment, platform and safety notes in ten
+languages — researched in-language, each with a source.
 
 ---
 
