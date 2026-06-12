@@ -48,7 +48,7 @@ pub async fn check_inbound(
             let tx_time = Utc
                 .timestamp_opt(tx.block_time, 0)
                 .single()
-                .unwrap_or_else(|| Utc::now()); // closure required — Utc::now is fn, not value
+                .unwrap_or_else(Utc::now);
 
             let entry = OperationalLedger {
                 id: 0, // Set by database

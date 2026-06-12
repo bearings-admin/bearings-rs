@@ -5,6 +5,8 @@
 //!   Every hour  — check for new inbound transactions on both wallets
 //!   Monday 03:00 UTC — update balance snapshot in platform_settings
 
+#![allow(dead_code)] // Path-B (Cardano/NORTH) scaffolding — wired as governance phases activate
+
 mod blockfrost;
 mod bluesky; // Bluesky social publishing — CONST-10, steward review required
 mod error;
