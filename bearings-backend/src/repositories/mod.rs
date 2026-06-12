@@ -11,21 +11,21 @@
 //! the value. This is the single place query values meet the URL, so user input
 //! can never inject an extra filter.
 
-pub mod event_repo;
-pub mod place_repo;
-pub mod club_repo;
-pub mod title_repo;
-pub mod competition_repo;
-pub mod history_repo;
+pub mod bear_future_repo;
 pub mod campaign_repo;
+pub mod club_repo;
+pub mod competition_repo;
 pub mod creator_repo;
 pub mod digital_space_repo;
-pub mod story_repo;
+pub mod event_repo;
 pub mod flag_repo;
-pub mod bear_future_repo;
-pub mod vote_repo;
-pub mod transparency_repo;
 pub mod future_idea_repo;
+pub mod history_repo;
+pub mod place_repo;
+pub mod story_repo;
+pub mod title_repo;
+pub mod transparency_repo;
+pub mod vote_repo;
 
 /// Build a PostgREST filter clause `&col=op.value` with the value percent-encoded.
 ///

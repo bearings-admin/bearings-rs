@@ -33,7 +33,9 @@ fn live_server() -> Option<TestServer> {
 /// Proves the app starts and routing is wired correctly.
 #[tokio::test]
 async fn health_returns_ok() {
-    let Some(server) = live_server() else { return; };
+    let Some(server) = live_server() else {
+        return;
+    };
     let resp = server.get("/health").await;
     resp.assert_status_ok();
     resp.assert_text("ok");
@@ -48,7 +50,9 @@ macro_rules! zone_smoke_test {
     ($name:ident, $zone:expr) => {
         #[tokio::test]
         async fn $name() {
-            let Some(server) = live_server() else { return; };
+            let Some(server) = live_server() else {
+                return;
+            };
             let resp = server.get(&format!("/?zone={}", $zone)).await;
             resp.assert_status_ok();
             let body = resp.text();
@@ -62,23 +66,25 @@ macro_rules! zone_smoke_test {
     };
 }
 
-zone_smoke_test!(zone_now_returns_html,            "now");
-zone_smoke_test!(zone_coming_up_returns_html,      "coming-up");
-zone_smoke_test!(zone_archive_returns_html,        "archive");
-zone_smoke_test!(zone_future_returns_html,         "future");
-zone_smoke_test!(zone_places_returns_html,         "places");
-zone_smoke_test!(zone_events_returns_html,         "events");
-zone_smoke_test!(zone_clubs_returns_html,          "clubs");
-zone_smoke_test!(zone_titles_returns_html,         "titles");
-zone_smoke_test!(zone_creators_returns_html,       "creators");
-zone_smoke_test!(zone_campaigns_returns_html,      "campaigns");
+zone_smoke_test!(zone_now_returns_html, "now");
+zone_smoke_test!(zone_coming_up_returns_html, "coming-up");
+zone_smoke_test!(zone_archive_returns_html, "archive");
+zone_smoke_test!(zone_future_returns_html, "future");
+zone_smoke_test!(zone_places_returns_html, "places");
+zone_smoke_test!(zone_events_returns_html, "events");
+zone_smoke_test!(zone_clubs_returns_html, "clubs");
+zone_smoke_test!(zone_titles_returns_html, "titles");
+zone_smoke_test!(zone_creators_returns_html, "creators");
+zone_smoke_test!(zone_campaigns_returns_html, "campaigns");
 zone_smoke_test!(zone_digital_spaces_returns_html, "digital-spaces");
 
 /// An unknown ?zone= value must not 500 -- falls through to Now.
 /// Prevents future Zone::parse changes from creating a 500 on typo input.
 #[tokio::test]
 async fn zone_unknown_does_not_500() {
-    let Some(server) = live_server() else { return; };
+    let Some(server) = live_server() else {
+        return;
+    };
     let resp = server.get("/?zone=does_not_exist_at_all").await;
     resp.assert_status_ok();
 }
@@ -90,7 +96,9 @@ async fn zone_unknown_does_not_500() {
 /// If EventRow.event_type doesn't match the JSON key "type", this 500s visibly.
 #[tokio::test]
 async fn api_events_returns_json_array() {
-    let Some(server) = live_server() else { return; };
+    let Some(server) = live_server() else {
+        return;
+    };
     let resp = server.get("/api/events").await;
     resp.assert_status_ok();
     let body = resp.text();
@@ -107,18 +115,25 @@ async fn api_events_returns_json_array() {
 /// Unit test for the Rust-side dedup helper lives in src/ssr/query.rs.
 #[tokio::test]
 async fn api_title_holders_current_returns_json() {
-    let Some(server) = live_server() else { return; };
+    let Some(server) = live_server() else {
+        return;
+    };
     let resp = server.get("/api/title-holders/current").await;
     resp.assert_status_ok();
-    let json: serde_json::Value = serde_json::from_str(&resp.text())
-        .expect("/api/title-holders/current is not valid JSON");
+    let json: serde_json::Value =
+        serde_json::from_str(&resp.text()).expect("/api/title-holders/current is not valid JSON");
     assert!(json.is_array(), "expected a JSON array");
-    assert!(!json.as_array().unwrap().is_empty(), "current_title_holders view returned empty");
+    assert!(
+        !json.as_array().unwrap().is_empty(),
+        "current_title_holders view returned empty"
+    );
 }
 
 #[tokio::test]
 async fn api_places_returns_json_array() {
-    let Some(server) = live_server() else { return; };
+    let Some(server) = live_server() else {
+        return;
+    };
     let resp = server.get("/api/places").await;
     resp.assert_status_ok();
     assert!(resp.text().starts_with('['));
@@ -129,7 +144,9 @@ async fn api_places_returns_json_array() {
 /// /coming-up must still work (legacy path kept for backwards compatibility).
 #[tokio::test]
 async fn legacy_coming_up_path_works() {
-    let Some(server) = live_server() else { return; };
+    let Some(server) = live_server() else {
+        return;
+    };
     let resp = server.get("/coming-up").await;
     let status = resp.status_code();
     assert!(
@@ -138,27 +155,36 @@ async fn legacy_coming_up_path_works() {
     );
 }
 
-
 // -- MCP server -----------------------------------------------------------------
 
 /// POST /mcp: initialize + tools/list. Neither hits the DB, so this proves the
 /// JSON-RPC dispatcher and the tool registry are wired correctly.
 #[tokio::test]
 async fn mcp_initialize_and_tools_list() {
-    let Some(server) = live_server() else { return; };
+    let Some(server) = live_server() else {
+        return;
+    };
 
-    let init = server.post("/mcp").json(&serde_json::json!(
-        {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}})).await;
+    let init = server
+        .post("/mcp")
+        .json(&serde_json::json!(
+        {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}))
+        .await;
     init.assert_status_ok();
     let b: serde_json::Value = init.json();
     assert_eq!(b["result"]["serverInfo"]["name"], "bearings");
 
-    let list = server.post("/mcp").json(&serde_json::json!(
-        {"jsonrpc":"2.0","id":2,"method":"tools/list"})).await;
+    let list = server
+        .post("/mcp")
+        .json(&serde_json::json!(
+        {"jsonrpc":"2.0","id":2,"method":"tools/list"}))
+        .await;
     list.assert_status_ok();
     let b: serde_json::Value = list.json();
     assert!(
-        b["result"]["tools"].as_array().is_some_and(|a| a.len() >= 5),
+        b["result"]["tools"]
+            .as_array()
+            .is_some_and(|a| a.len() >= 5),
         "expected >=5 MCP tools",
     );
 }

@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-pub type LangMap   = HashMap<&'static str, &'static str>;
+pub type LangMap = HashMap<&'static str, &'static str>;
 pub type I18nStore = HashMap<&'static str, LangMap>;
 
 pub fn translations() -> &'static I18nStore {

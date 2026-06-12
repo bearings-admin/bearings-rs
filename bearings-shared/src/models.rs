@@ -1,4 +1,3 @@
-
 //! Database models — mirrors the Bearings Supabase schema.
 //! Every field name matches the database column name exactly.
 //! Reviewed by: Gaspar
@@ -24,11 +23,11 @@ pub struct Event {
     #[serde(rename = "type")]
     pub event_type: Option<String>,
     pub size: Option<String>,
-    pub hot: Option<bool>,              // featured/hot event flag used by NOW zone
+    pub hot: Option<bool>, // featured/hot event flag used by NOW zone
     pub link: Option<String>,
     pub tags: Option<Vec<String>>,
     pub description: Option<String>,
-    pub going: Option<i32>,             // interested count
+    pub going: Option<i32>, // interested count
     pub active: Option<bool>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
@@ -43,8 +42,8 @@ pub struct Event {
     pub status: Option<String>,
     pub archive_notes: Option<String>,
     pub bluesky_handle: Option<String>,
-    pub slug: Option<String>,           // URL slug for SEO routes
-    pub event_mode: Option<String>,     // in-person | hybrid | online
+    pub slug: Option<String>,       // URL slug for SEO routes
+    pub event_mode: Option<String>, // in-person | hybrid | online
     pub stream_url: Option<String>,
     pub platform: Option<String>,
     pub recurring: Option<bool>,
@@ -115,7 +114,7 @@ pub struct TitleHolder {
     pub city: Option<String>,
     pub country: Option<String>,
     pub bio: Option<String>,
-    pub photo_link: Option<String>,   // DB column is photo_link not photo_url
+    pub photo_link: Option<String>, // DB column is photo_link not photo_url
     pub active: Option<bool>,
     pub created_at: Option<DateTime<Utc>>,
 }
@@ -187,10 +186,10 @@ pub struct Campaign {
 pub struct BearFutureProposal {
     #[serde(skip_serializing_if = "is_zero_id")]
     pub id: i64,
-    pub title: String,                          // NOT NULL
-    pub description: String,                    // NOT NULL
+    pub title: String,       // NOT NULL
+    pub description: String, // NOT NULL
     pub cause_category: Option<String>,
-    pub target_amount_ada: f64,                 // NOT NULL
+    pub target_amount_ada: f64, // NOT NULL
     pub target_amount_usd: Option<f64>,
     pub raised_ada: Option<f64>,
     pub receiving_wallet: Option<String>,
@@ -200,13 +199,13 @@ pub struct BearFutureProposal {
     pub supporting_link: Option<String>,
     pub vote_yes: Option<i32>,
     pub vote_no: Option<i32>,
-    pub vote_threshold_pct: Option<i32>,        // defaults to 60 (operational) or 75 (constitutional)
-    pub vote_min_count: Option<i32>,            // minimum NORTH votes required
+    pub vote_threshold_pct: Option<i32>, // defaults to 60 (operational) or 75 (constitutional)
+    pub vote_min_count: Option<i32>,     // minimum NORTH votes required
     pub voting_opens_at: Option<DateTime<Utc>>,
     pub voting_closes_at: Option<DateTime<Utc>>,
-    pub status: Option<String>,                 // draft | open | passed | failed | funded
+    pub status: Option<String>, // draft | open | passed | failed | funded
     pub funded_at: Option<DateTime<Utc>>,
-    pub tx_hash: Option<String>,                // on-chain proof when funded
+    pub tx_hash: Option<String>, // on-chain proof when funded
     pub privacy_mode: Option<bool>,
     pub urgent: Option<bool>,
     pub governance_ready: Option<bool>,
@@ -223,19 +222,19 @@ pub struct BearFutureProposal {
 pub struct GovernanceTokenHolder {
     #[serde(skip_serializing_if = "is_zero_id")]
     pub id: i64,
-    pub display_name: String,                   // NOT NULL in DB
-    pub cardano_wallet: Option<String>,         // single wallet field (not custodial/self_custody)
-    pub user_pref_id: Option<i64>,             // FK to user_preferences
-    pub contributor_tier: String,               // NOT NULL: anonymous|community|verified_contributor|club_officer|steward
+    pub display_name: String,           // NOT NULL in DB
+    pub cardano_wallet: Option<String>, // single wallet field (not custodial/self_custody)
+    pub user_pref_id: Option<i64>,      // FK to user_preferences
+    pub contributor_tier: String, // NOT NULL: anonymous|community|verified_contributor|club_officer|steward
     pub verified_role_description: Option<String>,
-    pub title_holder_id: Option<i64>,           // FK to title_holders (if verified via competition)
-    pub club_id: Option<i64>,                   // FK to clubs (if verified via club officer role)
-    pub token_balance: Option<i32>,             // NORTH token count = voting weight (default 1)
+    pub title_holder_id: Option<i64>, // FK to title_holders (if verified via competition)
+    pub club_id: Option<i64>,         // FK to clubs (if verified via club officer role)
+    pub token_balance: Option<i32>,   // NORTH token count = voting weight (default 1)
     pub proposals_voted: Option<i32>,
     pub proposals_passed: Option<i32>,
     pub verified: Option<bool>,
     pub verified_at: Option<DateTime<Utc>>,
-    pub verified_by: Option<String>,            // default: "steward"
+    pub verified_by: Option<String>, // default: "steward"
     pub active: Option<bool>,
     pub created_at: Option<DateTime<Utc>>,
     pub authorization_phase: Option<i32>,
@@ -256,9 +255,9 @@ pub struct OperationalLedger {
     pub description: Option<String>,
     pub category: Option<String>,
     pub authorized_by: Option<String>,
-    pub authorization_phase: Option<i32>,   // defaults to 1 in DB
-    pub donor_display: Option<String>,      // anonymised donor name if provided
-    pub donor_wallet: Option<String>,       // donor wallet (privacy sensitive)
+    pub authorization_phase: Option<i32>, // defaults to 1 in DB
+    pub donor_display: Option<String>,    // anonymised donor name if provided
+    pub donor_wallet: Option<String>,     // donor wallet (privacy sensitive)
     pub active: Option<bool>,
     pub created_at: Option<DateTime<Utc>>,
     pub notes: Option<String>,
@@ -266,7 +265,9 @@ pub struct OperationalLedger {
 
 // Helper for skip_serializing_if — prevents sending id=0 to PostgREST
 // PostgREST rejects inserts that supply a value for GENERATED ALWAYS columns
-fn is_zero_id(id: &i64) -> bool { *id == 0 }
+fn is_zero_id(id: &i64) -> bool {
+    *id == 0
+}
 
 // ── AGENT INFRASTRUCTURE ──────────────────────────────────────
 
@@ -290,7 +291,7 @@ pub struct Document {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Code {
     pub id: i64,
-    pub crate_name: String,  // crate column aliased to avoid Rust keyword
+    pub crate_name: String, // crate column aliased to avoid Rust keyword
     pub file_path: String,
     pub content: String,
     pub language: Option<String>,
@@ -298,7 +299,6 @@ pub struct Code {
     pub version: Option<String>,
     pub updated_at: Option<DateTime<Utc>>,
 }
-
 
 // ── IMPL HELPERS ──────────────────────────────────────────────
 // Utility methods on the model types.
@@ -369,9 +369,9 @@ impl OperationalLedger {
         let ada = self.amount_ada.unwrap_or(0.0);
         // direction is String (NOT NULL), not Option<String>
         let sign = match self.direction.as_str() {
-            "in"  => "+",
+            "in" => "+",
             "out" => "-",
-            _     => "",
+            _ => "",
         };
         format!("{}{:.2} ADA", sign, ada.abs())
     }
@@ -389,7 +389,6 @@ impl GovernanceTokenHolder {
     }
 }
 
-
 // ── BLUESKY / SOCIAL LAYER ────────────────────────────────────
 // These tables are live in the DB but not yet exposed via API routes.
 // They represent a whole platform capability that's ahead of the Rust code.
@@ -401,7 +400,7 @@ impl GovernanceTokenHolder {
 pub struct AgentInbox {
     #[serde(skip_serializing_if = "is_zero_id")]
     pub id: i64,
-    pub platform: String,                  // "bluesky" | "mastodon"
+    pub platform: String, // "bluesky" | "mastodon"
     pub post_uri: String,
     pub post_cid: Option<String>,
     pub author_handle: Option<String>,
@@ -409,8 +408,8 @@ pub struct AgentInbox {
     pub post_text: Option<String>,
     pub in_reply_to_uri: Option<String>,
     pub reply_to_post_id: Option<i64>,
-    pub intent: Option<String>,            // "submission" | "question" | "feedback"
-    pub status: Option<String>,            // "pending" | "responded" | "escalated"
+    pub intent: Option<String>, // "submission" | "question" | "feedback"
+    pub status: Option<String>, // "pending" | "responded" | "escalated"
     pub response_text: Option<String>,
     pub response_uri: Option<String>,
     pub responded_at: Option<DateTime<Utc>>,
@@ -427,7 +426,7 @@ pub struct AgentPost {
     #[serde(skip_serializing_if = "is_zero_id")]
     pub id: i64,
     pub platform: String,
-    pub post_type: String,                 // "event_announce" | "title_holder" | "campaign" | "history"
+    pub post_type: String, // "event_announce" | "title_holder" | "campaign" | "history"
     pub event_id: Option<i64>,
     pub place_id: Option<i64>,
     pub creator_id: Option<i64>,
@@ -439,12 +438,12 @@ pub struct AgentPost {
     pub post_cid: Option<String>,
     pub scheduled_for: Option<DateTime<Utc>>,
     pub published_at: Option<DateTime<Utc>>,
-    pub status: Option<String>,            // "draft" | "scheduled" | "published" | "failed"
+    pub status: Option<String>, // "draft" | "scheduled" | "published" | "failed"
     pub like_count: Option<i32>,
     pub repost_count: Option<i32>,
     pub reply_count: Option<i32>,
     pub quote_count: Option<i32>,
-    pub generated_by: Option<String>,      // "agent" | "steward"
+    pub generated_by: Option<String>, // "agent" | "steward"
     pub reviewed_by_steward: Option<bool>,
     pub notes: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
@@ -458,9 +457,9 @@ pub struct ProposalVote {
     #[serde(skip_serializing_if = "is_zero_id")]
     pub id: i64,
     pub proposal_id: i64,
-    pub voter_id: i64,                     // FK to governance_token_holders
-    pub vote: String,                      // "yes" | "no" | "abstain"
-    pub vote_weight: Option<i32>,          // = voter's token_balance at time of vote
+    pub voter_id: i64,            // FK to governance_token_holders
+    pub vote: String,             // "yes" | "no" | "abstain"
+    pub vote_weight: Option<i32>, // = voter's token_balance at time of vote
     pub voted_at: Option<DateTime<Utc>>,
     pub notes: Option<String>,
 }
@@ -471,10 +470,10 @@ pub struct ProposalVote {
 pub struct InclusionFlag {
     #[serde(skip_serializing_if = "is_zero_id")]
     pub id: i64,
-    pub code: String,                      // e.g. "MASC_ONLY", "AGE_RESTRICTION"
+    pub code: String, // e.g. "MASC_ONLY", "AGE_RESTRICTION"
     pub label: String,
     pub description: String,
-    pub severity: Option<String>,          // "info" | "caution" | "warning"
+    pub severity: Option<String>, // "info" | "caution" | "warning"
     pub affected_groups: Option<Vec<String>>,
     pub icon: Option<String>,
     pub active: Option<bool>,
@@ -488,7 +487,7 @@ pub struct Media {
     pub id: i64,
     pub title: String,
     pub creator_id: Option<i64>,
-    pub media_type: Option<String>,        // "film" | "album" | "podcast" | "book"
+    pub media_type: Option<String>, // "film" | "album" | "podcast" | "book"
     pub year: Option<i32>,
     pub status: Option<String>,
     pub description: Option<String>,
@@ -507,7 +506,6 @@ pub struct Media {
     pub timeline_month: Option<i32>,
 }
 
-
 // ── CREATOR ZONE ──────────────────────────────────────────────
 
 /// A bear community creator — musician, filmmaker, illustrator, historian.
@@ -517,7 +515,7 @@ pub struct Creator {
     #[serde(skip_serializing_if = "is_zero_id")]
     pub id: i64,
     pub name: String,
-    pub creator_type: Option<String>,   // musician | filmmaker | illustrator | historian | author | artist
+    pub creator_type: Option<String>, // musician | filmmaker | illustrator | historian | author | artist
     pub pronouns: Option<String>,
     pub city: Option<String>,
     pub country: Option<String>,
@@ -553,7 +551,7 @@ pub struct Story {
     #[serde(skip_serializing_if = "is_zero_id")]
     pub id: i64,
     pub title: String,
-    pub story_type: Option<String>,     // oral_history | essay | interview | archive
+    pub story_type: Option<String>, // oral_history | essay | interview | archive
     pub creator_id: Option<i64>,
     pub event_id: Option<i64>,
     pub club_id: Option<i64>,
@@ -579,7 +577,7 @@ pub struct DigitalSpace {
     #[serde(skip_serializing_if = "is_zero_id")]
     pub id: i64,
     pub name: String,
-    pub space_type: String,             // NOT NULL: app | discord | podcast | twitch | reddit | youtube | telegram
+    pub space_type: String, // NOT NULL: app | discord | podcast | twitch | reddit | youtube | telegram
     pub platform: Option<String>,
     pub url: Option<String>,
     pub app_store_ios: Option<String>,
@@ -626,8 +624,8 @@ pub struct UserPreferences {
     pub session_id: Option<String>,
     pub user_email: Option<String>,
     pub show_all_venues: Option<bool>,
-    pub hide_flag_codes: Option<Vec<String>>,  // inclusion_flag_codes to hide
-    pub warn_flag_codes: Option<Vec<String>>,  // inclusion_flag_codes to warn on
+    pub hide_flag_codes: Option<Vec<String>>, // inclusion_flag_codes to hide
+    pub warn_flag_codes: Option<Vec<String>>, // inclusion_flag_codes to warn on
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }

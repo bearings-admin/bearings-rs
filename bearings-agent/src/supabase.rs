@@ -1,4 +1,3 @@
-
 //! Supabase writer for the treasury agent.
 //! Service-role key gives write access for logging transactions,
 //! updating platform_settings, and managing governance records.
@@ -22,12 +21,10 @@ impl SupabaseWriter {
     pub fn from_env() -> anyhow::Result<Self> {
         use anyhow::Context;
         Ok(Self {
-            url: std::env::var("SUPABASE_URL")
-                .context("SUPABASE_URL not set")?,
+            url: std::env::var("SUPABASE_URL").context("SUPABASE_URL not set")?,
             service_key: std::env::var("SUPABASE_SERVICE_ROLE_KEY")
                 .context("SUPABASE_SERVICE_ROLE_KEY not set")?,
-            anon_key: std::env::var("SUPABASE_ANON_KEY")
-                .context("SUPABASE_ANON_KEY not set")?,
+            anon_key: std::env::var("SUPABASE_ANON_KEY").context("SUPABASE_ANON_KEY not set")?,
             client: reqwest::Client::new(),
         })
     }
@@ -44,7 +41,8 @@ impl SupabaseWriter {
 
     /// GET from any table path using the anon key (public reads).
     pub async fn get(&self, path: &str) -> Result<Vec<serde_json::Value>, AgentError> {
-        let entries: Vec<serde_json::Value> = self.client
+        let entries: Vec<serde_json::Value> = self
+            .client
             .get(format!("{}/rest/v1/{}", self.url, path))
             .header("apikey", &self.anon_key)
             .header("Authorization", format!("Bearer {}", self.anon_key))
@@ -91,11 +89,7 @@ impl SupabaseWriter {
     }
 
     /// Update a key/value pair in platform_settings.
-    pub async fn update_platform_setting(
-        &self,
-        key: &str,
-        value: &str,
-    ) -> Result<(), AgentError> {
+    pub async fn update_platform_setting(&self, key: &str, value: &str) -> Result<(), AgentError> {
         let path = format!("platform_settings?key=eq.{}", key);
         self.patch(&path, &json!({ "value": value })).await
     }

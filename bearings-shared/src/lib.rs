@@ -1,4 +1,3 @@
-
 //! bearings-shared — types shared across the bearings-rs workspace.
 //!
 //! Every crate in the workspace imports from here.

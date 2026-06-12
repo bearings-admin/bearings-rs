@@ -6,6 +6,9 @@
 //!
 //!   ?country=Germany   ?month=September   ?type=bear-run
 
+use crate::db::SupabaseClient;
+use crate::error::AppError;
+use crate::repositories::event_repo::{EventFilter, EventRepository, SupabaseEventRepository};
 use axum::{
     extract::{Query, State},
     http::{header, StatusCode},
@@ -14,9 +17,6 @@ use axum::{
 use bearings_shared::models::Event;
 use chrono::NaiveDate;
 use serde::Deserialize;
-use crate::db::SupabaseClient;
-use crate::error::AppError;
-use crate::repositories::event_repo::{EventFilter, EventRepository, SupabaseEventRepository};
 
 #[derive(Deserialize)]
 pub struct ICalQuery {
@@ -32,23 +32,29 @@ pub async fn export(
     Query(params): Query<ICalQuery>,
 ) -> Result<Response, AppError> {
     let repo = SupabaseEventRepository::new(db);
-    let events = repo.find(EventFilter {
-        country:       params.country,
-        month:         params.month,
-        event_type:    params.event_type,
-        upcoming_only: true,
-        limit:         200,
-    }).await?;
+    let events = repo
+        .find(EventFilter {
+            country: params.country,
+            month: params.month,
+            event_type: params.event_type,
+            upcoming_only: true,
+            limit: 200,
+        })
+        .await?;
 
     let ical = build_ical(&events);
     Ok((
         StatusCode::OK,
         [
             (header::CONTENT_TYPE, "text/calendar; charset=utf-8"),
-            (header::CONTENT_DISPOSITION, "attachment; filename=bearings-events.ics"),
+            (
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=bearings-events.ics",
+            ),
         ],
         ical,
-    ).into_response())
+    )
+        .into_response())
 }
 
 /// Build a valid iCalendar string (RFC 5545) from a list of events.
@@ -65,18 +71,30 @@ fn build_ical(events: &[Event]) -> String {
 
     for event in events {
         cal.push_str("BEGIN:VEVENT\r\n");
-        cal.push_str(&format!("UID:bearings-event-{}@bearings.community\r\n", event.id));
+        cal.push_str(&format!(
+            "UID:bearings-event-{}@bearings.community\r\n",
+            event.id
+        ));
         if let Some(start) = event.start_date {
-            cal.push_str(&format!("DTSTART;VALUE=DATE:{}\r\n", format_ical_date(start)));
+            cal.push_str(&format!(
+                "DTSTART;VALUE=DATE:{}\r\n",
+                format_ical_date(start)
+            ));
         }
         if let Some(end) = event.end_date {
             // iCal DTEND for all-day events is exclusive — add one day.
             let end_exclusive = end.checked_add_days(chrono::Days::new(1)).unwrap_or(end);
-            cal.push_str(&format!("DTEND;VALUE=DATE:{}\r\n", format_ical_date(end_exclusive)));
+            cal.push_str(&format!(
+                "DTEND;VALUE=DATE:{}\r\n",
+                format_ical_date(end_exclusive)
+            ));
         }
         cal.push_str(&format!("SUMMARY:{}\r\n", ical_escape(&event.name)));
         if let (Some(city), Some(country)) = (&event.city, &event.country) {
-            cal.push_str(&format!("LOCATION:{}\r\n", ical_escape(&format!("{city}, {country}"))));
+            cal.push_str(&format!(
+                "LOCATION:{}\r\n",
+                ical_escape(&format!("{city}, {country}"))
+            ));
         }
         if let Some(desc) = &event.description {
             let truncated: String = desc.chars().take(500).collect();
@@ -102,7 +120,7 @@ fn format_ical_date(date: NaiveDate) -> String {
 /// RFC 5545 §3.3.11 — escape commas, semicolons, backslashes, newlines.
 fn ical_escape(s: &str) -> String {
     s.replace('\\', "\\\\")
-     .replace(',', "\\,")
-     .replace(';', "\\;")
-     .replace('\n', "\\n")
+        .replace(',', "\\,")
+        .replace(';', "\\;")
+        .replace('\n', "\\n")
 }

@@ -1,5 +1,5 @@
-use leptos::*;
 use bearings_shared::models::Event;
+use leptos::*;
 
 #[server(GetNowEvents, "/api")]
 pub async fn get_now_events() -> Result<Vec<Event>, ServerFnError> {
@@ -52,9 +52,9 @@ pub fn NowPage() -> impl IntoView {
 fn EventCard(event: Event) -> impl IntoView {
     let city_country = match (&event.city, &event.country) {
         (Some(c), Some(co)) => format!("{c}, {co}"),
-        (Some(c), None)     => c.clone(),
-        (None, Some(co))    => co.clone(),
-        (None, None)        => String::new(),
+        (Some(c), None) => c.clone(),
+        (None, Some(co)) => co.clone(),
+        (None, None) => String::new(),
     };
     let name = event.name.clone();
     let link = event.link.clone();

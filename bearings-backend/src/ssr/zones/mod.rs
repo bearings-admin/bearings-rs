@@ -11,18 +11,18 @@
 //!   3. Add a `Zone::MyZone` arm to the `Zone` enum in `src/ssr/mod.rs`
 //!   4. Wire it in the `root()` dispatcher match in `src/ssr/mod.rs`
 
-pub mod now;
-pub mod coming_up;
-pub mod archive;
-pub mod future;
-pub mod places;
-pub mod events;
-pub mod clubs;
-pub mod titles;
-pub mod creators;
-pub mod shops;
-pub mod campaigns;
-pub mod ical;
-pub mod digital;
 pub mod admin;
+pub mod archive;
+pub mod campaigns;
+pub mod clubs;
+pub mod coming_up;
+pub mod creators;
+pub mod digital;
+pub mod events;
+pub mod future;
+pub mod ical;
+pub mod now;
+pub mod places;
+pub mod shops;
+pub mod titles;
 pub mod transparency;

@@ -1,4 +1,3 @@
-
 //! Middleware and request utilities.
 //!
 //! Privacy mode (CONST-6) is a constitutional requirement — it cannot be
@@ -14,23 +13,70 @@
 /// user record, or financial transaction.
 pub const CRIMINALISED_COUNTRIES: &[&str] = &[
     // Africa
-    "algeria", "burundi", "cameroon", "chad", "comoros",
-    "egypt", "eritrea", "ethiopia", "gambia", "ghana",
-    "guinea", "kenya", "lesotho", "liberia", "libya",
-    "malawi", "mauritania", "mauritius", "morocco", "mozambique",
-    "namibia", "nigeria", "senegal", "sierra leone", "somalia",
-    "south sudan", "sudan", "tanzania", "togo", "tunisia",
-    "uganda", "zambia", "zimbabwe",
+    "algeria",
+    "burundi",
+    "cameroon",
+    "chad",
+    "comoros",
+    "egypt",
+    "eritrea",
+    "ethiopia",
+    "gambia",
+    "ghana",
+    "guinea",
+    "kenya",
+    "lesotho",
+    "liberia",
+    "libya",
+    "malawi",
+    "mauritania",
+    "mauritius",
+    "morocco",
+    "mozambique",
+    "namibia",
+    "nigeria",
+    "senegal",
+    "sierra leone",
+    "somalia",
+    "south sudan",
+    "sudan",
+    "tanzania",
+    "togo",
+    "tunisia",
+    "uganda",
+    "zambia",
+    "zimbabwe",
     // Asia
-    "afghanistan", "bangladesh", "brunei", "indonesia",
-    "iran", "iraq", "kuwait", "lebanon", "malaysia",
-    "maldives", "myanmar", "oman", "pakistan", "palestine",
-    "qatar", "saudi arabia", "singapore", "sri lanka",
-    "syria", "turkmenistan", "uae", "united arab emirates",
-    "uzbekistan", "yemen",
+    "afghanistan",
+    "bangladesh",
+    "brunei",
+    "indonesia",
+    "iran",
+    "iraq",
+    "kuwait",
+    "lebanon",
+    "malaysia",
+    "maldives",
+    "myanmar",
+    "oman",
+    "pakistan",
+    "palestine",
+    "qatar",
+    "saudi arabia",
+    "singapore",
+    "sri lanka",
+    "syria",
+    "turkmenistan",
+    "uae",
+    "united arab emirates",
+    "uzbekistan",
+    "yemen",
     // Oceania / other
-    "papua new guinea", "solomon islands", "tonga",
-    "samoa", "cook islands",
+    "papua new guinea",
+    "solomon islands",
+    "tonga",
+    "samoa",
+    "cook islands",
 ];
 
 /// Check whether a country name is on the criminalised list.
@@ -58,7 +104,7 @@ pub fn redact_wallet(address: &str) -> String {
     if address.len() < 20 {
         return "addr1...redacted".to_string();
     }
-    format!("{}...{}", &address[..8], &address[address.len()-6..])
+    format!("{}...{}", &address[..8], &address[address.len() - 6..])
 }
 
 #[cfg(test)]

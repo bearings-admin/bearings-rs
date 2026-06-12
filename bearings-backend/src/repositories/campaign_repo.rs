@@ -1,9 +1,9 @@
 //! Data access for the `campaigns` table.
 
-use async_trait::async_trait;
-use bearings_shared::models::Campaign;
 use crate::db::SupabaseClient;
 use crate::error::AppError;
+use async_trait::async_trait;
+use bearings_shared::models::Campaign;
 
 #[derive(Debug, Default, Clone)]
 pub struct CampaignFilter {
@@ -15,8 +15,14 @@ pub trait CampaignRepository: Send + Sync {
     async fn find(&self, filter: CampaignFilter) -> Result<Vec<Campaign>, AppError>;
 }
 
-pub struct SupabaseCampaignRepository { db: SupabaseClient }
-impl SupabaseCampaignRepository { pub fn new(db: SupabaseClient) -> Self { Self { db } } }
+pub struct SupabaseCampaignRepository {
+    db: SupabaseClient,
+}
+impl SupabaseCampaignRepository {
+    pub fn new(db: SupabaseClient) -> Self {
+        Self { db }
+    }
+}
 
 #[async_trait]
 impl CampaignRepository for SupabaseCampaignRepository {
@@ -25,7 +31,9 @@ impl CampaignRepository for SupabaseCampaignRepository {
             "{}/rest/v1/campaigns?select=*&order=active.desc,name.asc",
             self.db.url
         );
-        if !filter.include_archived { url.push_str("&active=eq.true"); }
+        if !filter.include_archived {
+            url.push_str("&active=eq.true");
+        }
         // Never expose campaigns flagged privacy_mode in the public list (CONST-6).
         url.push_str("&privacy_mode=eq.false");
         self.db.get_json::<Vec<Campaign>>(&url).await

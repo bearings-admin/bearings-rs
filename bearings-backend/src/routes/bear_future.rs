@@ -2,14 +2,17 @@
 //! Data access in `repositories::bear_future_repo`; this layer maps HTTP <-> repo
 //! and applies privacy redaction (CONST-6) before responding.
 
-use axum::{extract::{Query, State}, Json};
-use bearings_shared::models::{BearFutureProposal, OperationalLedger};
-use serde::{Deserialize, Serialize};
 use crate::db::SupabaseClient;
 use crate::error::AppError;
 use crate::repositories::bear_future_repo::{
-    BearFutureRepository, SupabaseBearFutureRepository, PublicTokenHolder,
+    BearFutureRepository, PublicTokenHolder, SupabaseBearFutureRepository,
 };
+use axum::{
+    extract::{Query, State},
+    Json,
+};
+use bearings_shared::models::{BearFutureProposal, OperationalLedger};
+use serde::{Deserialize, Serialize};
 
 /// Treasury summary for the Bear Future "The Pot" section.
 #[derive(Serialize)]
@@ -24,9 +27,7 @@ pub struct TreasurySummary {
 }
 
 /// GET /api/treasury — live treasury balances from platform_settings.
-pub async fn treasury(
-    State(db): State<SupabaseClient>,
-) -> Result<Json<TreasurySummary>, AppError> {
+pub async fn treasury(State(db): State<SupabaseClient>) -> Result<Json<TreasurySummary>, AppError> {
     let repo = SupabaseBearFutureRepository::new(db);
     let s = repo.treasury_settings().await?;
     let num = |k: &str, default: f64| s.get(k).and_then(|v| v.parse().ok()).unwrap_or(default);
@@ -34,19 +35,27 @@ pub async fn treasury(
     Ok(Json(TreasurySummary {
         community_treasury_ada: num("treasury_balance_ada", 0.0),
         operational_wallet_ada: num("operational_balance_ada", 0.0),
-        governance_token_total_minted: s.get("governance_token_total_minted")
-            .and_then(|v| v.parse().ok()).unwrap_or(0),
-        treasury_phase: s.get("treasury_phase").and_then(|v| v.parse().ok()).unwrap_or(1),
+        governance_token_total_minted: s
+            .get("governance_token_total_minted")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0),
+        treasury_phase: s
+            .get("treasury_phase")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1),
         community_wallet_address: s.get("treasury_wallet_ada").cloned(),
         operational_wallet_address: s.get("operational_wallet_ada").cloned(),
-        bear_future_active: s.get("bear_future_active").map(|v| v == "true").unwrap_or(false),
+        bear_future_active: s
+            .get("bear_future_active")
+            .map(|v| v == "true")
+            .unwrap_or(false),
     }))
 }
 
 #[derive(Deserialize)]
 pub struct ProposalsQuery {
     pub status: Option<String>,
-    pub limit:  Option<u32>,
+    pub limit: Option<u32>,
 }
 
 /// GET /api/bear-future — proposals; privacy_mode rows are redacted (CONST-6).
@@ -55,14 +64,19 @@ pub async fn proposals(
     Query(params): Query<ProposalsQuery>,
 ) -> Result<Json<Vec<BearFutureProposal>>, AppError> {
     let repo = SupabaseBearFutureRepository::new(db);
-    let proposals = repo.find_proposals(params.status, params.limit.unwrap_or(50)).await?;
+    let proposals = repo
+        .find_proposals(params.status, params.limit.unwrap_or(50))
+        .await?;
 
-    let redacted = proposals.into_iter().map(|mut p| {
-        if p.privacy_mode.unwrap_or(false) {
-            p.receiving_wallet = Some("redacted — privacy mode".to_string());
-        }
-        p
-    }).collect();
+    let redacted = proposals
+        .into_iter()
+        .map(|mut p| {
+            if p.privacy_mode.unwrap_or(false) {
+                p.receiving_wallet = Some("redacted — privacy mode".to_string());
+            }
+            p
+        })
+        .collect();
     Ok(Json(redacted))
 }
 

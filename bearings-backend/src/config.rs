@@ -1,4 +1,3 @@
-
 //! Application configuration — validated at startup.
 //!
 //! All environment variables are checked here at startup rather than
@@ -39,11 +38,9 @@ impl Config {
                 .parse()
                 .context("PORT must be a valid port number")?,
 
-            host: std::env::var("HOST")
-                .unwrap_or_else(|_| "0.0.0.0".into()),
+            host: std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".into()),
 
-            supabase_url: std::env::var("SUPABASE_URL")
-                .context("SUPABASE_URL is required")?,
+            supabase_url: std::env::var("SUPABASE_URL").context("SUPABASE_URL is required")?,
 
             supabase_anon_key: std::env::var("SUPABASE_ANON_KEY")
                 .context("SUPABASE_ANON_KEY is required")?,
@@ -85,9 +82,14 @@ impl Config {
         };
 
         #[derive(serde::Deserialize)]
-        struct Setting { key: String, value: Option<String> }
+        struct Setting {
+            key: String,
+            value: Option<String>,
+        }
 
-        let Ok(settings) = resp.json::<Vec<Setting>>().await else { return; };
+        let Ok(settings) = resp.json::<Vec<Setting>>().await else {
+            return;
+        };
 
         for s in settings {
             match (s.key.as_str(), s.value.as_deref()) {
@@ -105,7 +107,8 @@ impl Config {
 
         tracing::info!(
             "Feature flags loaded — bear_future: {}, treasury_phase: {}",
-            self.bear_future_active, self.treasury_phase
+            self.bear_future_active,
+            self.treasury_phase
         );
     }
 

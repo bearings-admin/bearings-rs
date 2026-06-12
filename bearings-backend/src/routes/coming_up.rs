@@ -1,4 +1,3 @@
-
 //! COMING UP — the trip planner endpoint.
 //!
 //! A bear planning a trip sets two things:
@@ -30,10 +29,10 @@
 //!   winter  → December–February
 //!   (no season) → next 6 months from today
 
+use crate::{db::SupabaseClient, error::AppError};
 use axum::extract::{Query, State};
 use axum::Json;
 use serde::Deserialize;
-use crate::{db::SupabaseClient, error::AppError};
 
 #[derive(Deserialize)]
 pub struct ComingUpQuery {

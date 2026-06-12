@@ -1,8 +1,8 @@
 //! Data access for the `future_ideas` table (Bear Future "What Could Be" upvotes).
 
-use async_trait::async_trait;
 use crate::db::SupabaseClient;
 use crate::error::AppError;
+use async_trait::async_trait;
 
 #[async_trait]
 pub trait FutureIdeaRepository: Send + Sync {
@@ -11,8 +11,14 @@ pub trait FutureIdeaRepository: Send + Sync {
     async fn increment_upvotes(&self, id: i64) -> Result<Option<i64>, AppError>;
 }
 
-pub struct SupabaseFutureIdeaRepository { db: SupabaseClient }
-impl SupabaseFutureIdeaRepository { pub fn new(db: SupabaseClient) -> Self { Self { db } } }
+pub struct SupabaseFutureIdeaRepository {
+    db: SupabaseClient,
+}
+impl SupabaseFutureIdeaRepository {
+    pub fn new(db: SupabaseClient) -> Self {
+        Self { db }
+    }
+}
 
 #[async_trait]
 impl FutureIdeaRepository for SupabaseFutureIdeaRepository {
@@ -21,6 +27,8 @@ impl FutureIdeaRepository for SupabaseFutureIdeaRepository {
         // via the increment_future_idea_upvotes(idea_id) Postgres function.
         // Replaces a read-then-write that dropped upvotes under concurrent taps.
         let body = serde_json::json!({ "idea_id": id });
-        self.db.post_rpc::<_, Option<i64>>("increment_future_idea_upvotes", &body).await
+        self.db
+            .post_rpc::<_, Option<i64>>("increment_future_idea_upvotes", &body)
+            .await
     }
 }

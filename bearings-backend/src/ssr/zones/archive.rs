@@ -1,16 +1,21 @@
 //! Zone: archive
 
-use axum::response::{Html, IntoResponse, Response};
+use super::super::query::*;
 use crate::db::LogErr;
-use axum::http::StatusCode;
 use crate::{db::SupabaseClient, i18n, ui::*};
+use axum::http::StatusCode;
+use axum::response::{Html, IntoResponse, Response};
 #[allow(unused_imports)]
 use chrono::{Months, Utc};
 #[allow(unused_imports)]
 use std::collections::HashMap;
-use super::super::query::*;
 
-pub(crate) async fn zone_archive(db: SupabaseClient, decade: Option<String>, fragment: Option<String>, lang: &str) -> Response {
+pub(crate) async fn zone_archive(
+    db: SupabaseClient,
+    decade: Option<String>,
+    fragment: Option<String>,
+    lang: &str,
+) -> Response {
     let url = format!(
         "{}/rest/v1/bear_history?active=eq.true\
          &select=year,title,description,category,significance,link\
@@ -42,10 +47,14 @@ pub(crate) async fn zone_archive(db: SupabaseClient, decade: Option<String>, fra
     let all_titles: Vec<TitleHolderRow> = titles_res.or_log("archive:titles_res");
     let all_stories: Vec<CommunityStoryRow> = stories_res.or_log("archive:stories_res");
 
-    let decades = ["1980s","1990s","2000s","2010s","2020s"];
-    let active  = decade.as_deref().unwrap_or("2020s");
+    let decades = ["1980s", "1990s", "2000s", "2010s", "2020s"];
+    let active = decade.as_deref().unwrap_or("2020s");
     let d_start: i64 = match active {
-        "1980s" => 1980, "1990s" => 1990, "2000s" => 2000, "2010s" => 2010, _ => 2020,
+        "1980s" => 1980,
+        "1990s" => 1990,
+        "2000s" => 2000,
+        "2010s" => 2010,
+        _ => 2020,
     };
 
     let decade_context: &str = match active {
@@ -90,34 +99,48 @@ pub(crate) async fn zone_archive(db: SupabaseClient, decade: Option<String>, fra
     }).collect::<Vec<_>>().join("");
 
     // Filter everything to active decade
-    let decade_entries: Vec<&BearHistoryRow> = history.iter()
-        .filter(|h| h.year.map(|y| y as i64)
-            .map(|y| y >= d_start && y < d_start + 10)
-            .unwrap_or(false))
+    let decade_entries: Vec<&BearHistoryRow> = history
+        .iter()
+        .filter(|h| {
+            h.year
+                .map(|y| y as i64)
+                .map(|y| y >= d_start && y < d_start + 10)
+                .unwrap_or(false)
+        })
         .collect();
 
-    let decade_titles: Vec<&TitleHolderRow> = all_titles.iter()
-        .filter(|t| t.year.map(|y| y as i64)
-            .map(|y| y >= d_start && y < d_start + 10)
-            .unwrap_or(false))
+    let decade_titles: Vec<&TitleHolderRow> = all_titles
+        .iter()
+        .filter(|t| {
+            t.year
+                .map(|y| y as i64)
+                .map(|y| y >= d_start && y < d_start + 10)
+                .unwrap_or(false)
+        })
         .collect();
 
-    let decade_stories: Vec<&CommunityStoryRow> = all_stories.iter()
-        .filter(|st| st.year.map(|y| y as i64)
-            .map(|y| y >= d_start && y < d_start + 10)
-            .unwrap_or(false))
+    let decade_stories: Vec<&CommunityStoryRow> = all_stories
+        .iter()
+        .filter(|st| {
+            st.year
+                .map(|y| y as i64)
+                .map(|y| y >= d_start && y < d_start + 10)
+                .unwrap_or(false)
+        })
         .collect();
 
     let timeline = build_timeline(&decade_entries);
 
-    let title_cards: String = decade_titles.iter().map(|t| {
-        let title  = esc(t.title_name.as_deref().unwrap_or(""));
-        let holder = esc(t.holder_name.as_str());
-        let year   = t.year.unwrap_or(0) as i64;
-        let city   = esc(t.city.as_deref().unwrap_or(""));
-        let ctry   = esc(t.country.as_deref().unwrap_or(""));
-        card(&format!(
-            "<div style=\"display:flex;justify-content:space-between;align-items:center\">\
+    let title_cards: String = decade_titles
+        .iter()
+        .map(|t| {
+            let title = esc(t.title_name.as_deref().unwrap_or(""));
+            let holder = esc(t.holder_name.as_str());
+            let year = t.year.unwrap_or(0) as i64;
+            let city = esc(t.city.as_deref().unwrap_or(""));
+            let ctry = esc(t.country.as_deref().unwrap_or(""));
+            card(&format!(
+                "<div style=\"display:flex;justify-content:space-between;align-items:center\">\
               <div>\
                 <div style=\"font-weight:600;font-size:14px\">{title}</div>\
                 <div style=\"font-size:12px;color:{MID}\">{holder}</div>\
@@ -125,9 +148,14 @@ pub(crate) async fn zone_archive(db: SupabaseClient, decade: Option<String>, fra
               </div>\
               <div style=\"font-size:22px;font-weight:700;color:{ORANGE}\">{year}</div>\
             </div>",
-            sep = if !city.is_empty() && !ctry.is_empty() { ", " } else { "" },
-        ))
-    }).collect();
+                sep = if !city.is_empty() && !ctry.is_empty() {
+                    ", "
+                } else {
+                    ""
+                },
+            ))
+        })
+        .collect();
 
     let story_cards: String = decade_stories.iter().map(|st| {
         let stitle   = esc(st.title.as_deref().unwrap_or(""));
@@ -183,7 +211,10 @@ pub(crate) async fn zone_archive(db: SupabaseClient, decade: Option<String>, fra
     } else {
         format!(
             "{}{}",
-            sh("Voices — Oral Histories &amp; Scholarship", Some(decade_stories.len())),
+            sh(
+                "Voices — Oral Histories &amp; Scholarship",
+                Some(decade_stories.len())
+            ),
             story_cards,
         )
     };
@@ -197,7 +228,10 @@ pub(crate) async fn zone_archive(db: SupabaseClient, decade: Option<String>, fra
          {timeline}\
          {titles_section}\
          {stories_section}",
-        sh_milestones = sh(&format!("{} Milestones", esc(active)), Some(decade_entries.len())),
+        sh_milestones = sh(
+            &format!("{} Milestones", esc(active)),
+            Some(decade_entries.len())
+        ),
     );
 
     // Return only the tl fragment for HTMX decade tab swaps
@@ -220,7 +254,14 @@ pub(crate) async fn zone_archive(db: SupabaseClient, decade: Option<String>, fra
         </div>",
         n = history.len(),
     );
-    Html(shell("Bear Archives", "Community history 1987 to present.", "archive", &body, lang)).into_response()
+    Html(shell(
+        "Bear Archives",
+        "Community history 1987 to present.",
+        "archive",
+        &body,
+        lang,
+    ))
+    .into_response()
 }
 
 pub(crate) fn build_timeline(entries: &[&BearHistoryRow]) -> String {
@@ -287,5 +328,3 @@ pub(crate) fn build_timeline(entries: &[&BearHistoryRow]) -> String {
     }).collect()
 }
 // ── ZONE: BEAR FUTURE ─────────────────────────────────────────
-
-

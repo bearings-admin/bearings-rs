@@ -1,4 +1,3 @@
-
 //! Enum types for the Bearings database schema.
 //!
 //! NOTE: These enums are defined but route handlers currently use raw String

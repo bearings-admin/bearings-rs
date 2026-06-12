@@ -1,4 +1,3 @@
-
 //! Unit tests for bearings-shared model helpers.
 //! These run without any network access — pure logic tests.
 

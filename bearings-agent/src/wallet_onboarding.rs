@@ -1,4 +1,3 @@
-
 //! Embedded Cardano wallet onboarding.
 //!
 //! Design intent: a bear should be able to participate in governance
@@ -52,9 +51,13 @@ pub async fn create_custodial_wallet(
 
     let path = format!("governance_token_holders?id=eq.{}", contributor_id);
     // DB column is cardano_wallet (single field, not custodial/self_custody split)
-    db.patch(&path, &serde_json::json!({
-        "cardano_wallet": placeholder_address,
-    })).await?;
+    db.patch(
+        &path,
+        &serde_json::json!({
+            "cardano_wallet": placeholder_address,
+        }),
+    )
+    .await?;
 
     tracing::info!(
         "Custodial wallet placeholder created for contributor {}",
@@ -75,15 +78,19 @@ pub async fn register_self_custody_wallet(
     // Validate it looks like a Cardano address (starts with addr1)
     if !wallet_address.starts_with("addr1") {
         return Err(AgentError::Supabase(
-            "Invalid Cardano address — must start with addr1".to_string()
+            "Invalid Cardano address — must start with addr1".to_string(),
         ));
     }
 
     let path = format!("governance_token_holders?id=eq.{}", contributor_id);
     // DB column is cardano_wallet — self-custody replaces custodial address
-    db.patch(&path, &serde_json::json!({
-        "cardano_wallet": wallet_address,
-    })).await?;
+    db.patch(
+        &path,
+        &serde_json::json!({
+            "cardano_wallet": wallet_address,
+        }),
+    )
+    .await?;
 
     tracing::info!(
         "Self-custody wallet registered for contributor {} — NORTH transfer pending",

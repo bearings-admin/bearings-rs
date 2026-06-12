@@ -1,13 +1,13 @@
 //! Zone: titles
 
-use axum::response::{Html, IntoResponse, Response};
+use super::super::query::*;
 use crate::db::LogErr;
 use crate::{db::SupabaseClient, ui::*};
+use axum::response::{Html, IntoResponse, Response};
 #[allow(unused_imports)]
 use chrono::{Months, Utc};
 #[allow(unused_imports)]
 use std::collections::HashMap;
-use super::super::query::*;
 
 pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
     // Fetch competitions with scope/country info
@@ -40,9 +40,10 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
     let clubs: Vec<ClubRow> = clubs_res.or_log("titles:clubs_res");
 
     // Index clubs by id
-    let club_map: std::collections::HashMap<i64, (String, String)> = clubs.iter()
+    let club_map: std::collections::HashMap<i64, (String, String)> = clubs
+        .iter()
         .filter_map(|c| {
-            let id   = c.id?;
+            let id = c.id?;
             let name = esc(c.name.as_str());
             let site = esc(c.website.as_deref().unwrap_or(""));
             Some((id, (name, site)))
@@ -50,7 +51,8 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
         .collect();
 
     // Group holders by competition_id
-    let mut holders_by_comp: std::collections::HashMap<i64, Vec<&TitleHolderRow>> = std::collections::HashMap::new();
+    let mut holders_by_comp: std::collections::HashMap<i64, Vec<&TitleHolderRow>> =
+        std::collections::HashMap::new();
     for h in &holders {
         if let Some(cid) = h.competition_id {
             holders_by_comp.entry(cid).or_default().push(h);
@@ -58,28 +60,40 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
     }
 
     // Scope order and icons
-    let scope_order = ["international", "continental", "national", "regional", "local"];
-    let scope_icon  = |s: &str| match s {
-        "international" => "🌍", "continental" => "🌎",
-        "national" => "🏳️",    "regional"      => "📍",
-        "local"    => "🏙️",    _               => "🐻",
+    let scope_order = [
+        "international",
+        "continental",
+        "national",
+        "regional",
+        "local",
+    ];
+    let scope_icon = |s: &str| match s {
+        "international" => "🌍",
+        "continental" => "🌎",
+        "national" => "🏳️",
+        "regional" => "📍",
+        "local" => "🏙️",
+        _ => "🐻",
     };
 
     // Build sections by scope
     let mut sections = String::new();
     for scope in scope_order {
-        let scope_comps: Vec<&CompetitionRow> = comps.iter()
+        let scope_comps: Vec<&CompetitionRow> = comps
+            .iter()
             .filter(|c| c.scope.as_deref().unwrap_or("") == scope)
             .collect();
-        if scope_comps.is_empty() { continue; }
+        if scope_comps.is_empty() {
+            continue;
+        }
 
         let scope_label = match scope {
             "international" => "International",
-            "continental"   => "Continental",
-            "national"      => "National",
-            "regional"      => "Regional",
-            "local"         => "Local",
-            _               => scope,
+            "continental" => "Continental",
+            "national" => "National",
+            "regional" => "Regional",
+            "local" => "Local",
+            _ => scope,
         };
         sections.push_str(&format!(
             "<div style=\"font-size:10px;font-weight:700;text-transform:uppercase;\
@@ -87,45 +101,62 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
         ));
 
         for comp in scope_comps {
-            let _cid     = comp.id;
-            let cname   = esc(comp.name.as_str());
+            let _cid = comp.id;
+            let cname = esc(comp.name.as_str());
             let ccountry = esc(comp.country.as_deref().unwrap_or(""));
-            let ccity   = esc(comp.city.as_deref().unwrap_or(""));
-            let csite   = esc(comp.website.as_deref().unwrap_or("#"));
+            let ccity = esc(comp.city.as_deref().unwrap_or(""));
+            let csite = esc(comp.website.as_deref().unwrap_or("#"));
             let cfounded = comp.founded_year.unwrap_or(0) as i64;
             let club_id = comp.owning_club_id.unwrap_or(0);
-            let icon    = scope_icon(scope);
+            let icon = scope_icon(scope);
 
             let site_btn = if !csite.is_empty() && csite != "#" {
-                format!("<a href=\"{csite}\" target=\"_blank\" rel=\"noopener\" \
+                format!(
+                    "<a href=\"{csite}\" target=\"_blank\" rel=\"noopener\" \
                           style=\"font-size:10px;color:{ORANGE};text-decoration:none;\
                                   border:1px solid {ORANGE};border-radius:8px;\
-                                  padding:2px 8px;white-space:nowrap\">Site</a>")
-            } else { String::new() };
+                                  padding:2px 8px;white-space:nowrap\">Site</a>"
+                )
+            } else {
+                String::new()
+            };
 
             let club_btn = if club_id > 0 {
                 if let Some((cln, cls)) = club_map.get(&club_id) {
                     if !cls.is_empty() && *cls != "#" {
-                        format!("<a href=\"{cls}\" target=\"_blank\" rel=\"noopener\" \
+                        format!(
+                            "<a href=\"{cls}\" target=\"_blank\" rel=\"noopener\" \
                                   style=\"font-size:10px;color:{BROWN};text-decoration:none;\
                                           border:1px solid {TAN};border-radius:8px;\
-                                          padding:2px 8px;white-space:nowrap\">{cln}</a>")
+                                          padding:2px 8px;white-space:nowrap\">{cln}</a>"
+                        )
                     } else {
                         format!("<span style=\"font-size:10px;color:{MID}\">{cln}</span>")
                     }
-                } else { String::new() }
-            } else { String::new() };
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            };
 
             let meta = {
                 let mut parts = vec![];
-                if !ccity.is_empty() { parts.push(ccity.to_string()); }
-                if !ccountry.is_empty() { parts.push(ccountry.to_string()); }
-                if cfounded > 0 { parts.push(format!("est. {cfounded}")); }
+                if !ccity.is_empty() {
+                    parts.push(ccity.to_string());
+                }
+                if !ccountry.is_empty() {
+                    parts.push(ccountry.to_string());
+                }
+                if cfounded > 0 {
+                    parts.push(format!("est. {cfounded}"));
+                }
                 parts.join(" · ")
             };
 
             // Titleholders sublist
-            let comp_holders = holders_by_comp.get(&comp.id)
+            let comp_holders = holders_by_comp
+                .get(&comp.id)
                 .map(|v| v.as_slice())
                 .unwrap_or(&[]);
 
@@ -173,7 +204,9 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
             let more_note = if comp_holders.len() > 12 {
                 format!("<div style=\"font-size:11px;color:{MID};padding:4px 0\">+ <a href=\'/?zone=archive\' style=\'color:{ORANGE}\'>{} more in archive →</a></div>",
                     comp_holders.len() - 12)
-            } else { String::new() };
+            } else {
+                String::new()
+            };
 
             let charity_h = comp_holders.iter().find_map(|h| {
                 let n = h.charity_name.as_deref().filter(|s| !s.is_empty())?;
@@ -215,7 +248,12 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
           Competitions and their titleholders. IBR complete 1992–2011.</p>\
         {sections}"
     );
-    Html(shell("Titles", "Bear title holders worldwide.", "archive", &body, lang)).into_response()
+    Html(shell(
+        "Titles",
+        "Bear title holders worldwide.",
+        "archive",
+        &body,
+        lang,
+    ))
+    .into_response()
 }
-
-

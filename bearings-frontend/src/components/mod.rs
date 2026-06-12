@@ -1,2 +1,2 @@
-pub mod now;
 pub mod coming_up;
+pub mod now;

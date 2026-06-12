@@ -1,4 +1,3 @@
-
 //! x402 Protocol — autonomous agent payment execution.
 //!
 //! The x402 Protocol launched on Cardano mainnet in April 2026.
@@ -42,17 +41,17 @@ impl PaymentCategory {
     /// Hard-coded ceiling — governance vote needed to raise these limits.
     pub fn max_ada(&self) -> f64 {
         match self {
-            PaymentCategory::AnthropicApi  => 100.0,
-            PaymentCategory::VpsHosting    => 50.0,
+            PaymentCategory::AnthropicApi => 100.0,
+            PaymentCategory::VpsHosting => 50.0,
             PaymentCategory::DomainRenewal => 50.0,
-            PaymentCategory::BlockfrostApi => 0.0,   // Free tier
+            PaymentCategory::BlockfrostApi => 0.0, // Free tier
         }
     }
 
     pub fn description(&self) -> &str {
         match self {
-            PaymentCategory::AnthropicApi  => "Anthropic API — research agent compute",
-            PaymentCategory::VpsHosting    => "Hostinger VPS — backend + agent hosting",
+            PaymentCategory::AnthropicApi => "Anthropic API — research agent compute",
+            PaymentCategory::VpsHosting => "Hostinger VPS — backend + agent hosting",
             PaymentCategory::DomainRenewal => "Domain renewal",
             PaymentCategory::BlockfrostApi => "Blockfrost — Cardano wallet monitoring",
         }
@@ -61,9 +60,7 @@ impl PaymentCategory {
 
 /// Guard: check treasury_phase before any payment attempt.
 /// Returns Err if phase < 4. Called at the top of every payment function.
-pub async fn check_phase_before_payment(
-    db: &SupabaseWriter,
-) -> Result<(), AgentError> {
+pub async fn check_phase_before_payment(db: &SupabaseWriter) -> Result<(), AgentError> {
     let settings: Vec<serde_json::Value> = db
         .get("platform_settings?key=eq.treasury_phase&select=value")
         .await?;

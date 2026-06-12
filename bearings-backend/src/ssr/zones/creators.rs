@@ -1,20 +1,28 @@
 //! Zone: creators — bear creators grouped by craft. Authors list their books with buy links.
 
-use axum::response::{Html, IntoResponse, Response};
+use super::super::query::*;
 use crate::db::LogErr;
 use crate::{db::SupabaseClient, ui::*};
+use axum::response::{Html, IntoResponse, Response};
 use std::collections::{HashMap, HashSet};
-use super::super::query::*;
 
 /// Display sections in page order: (heading, creator_type values it collects).
 const SECTIONS: &[(&str, &[&str])] = &[
-    ("Musicians",                     &["musician"]),
-    ("DJs",                           &["dj"]),
-    ("Authors & historians",          &["author", "historian"]),
-    ("Visual artists & illustrators", &["illustrator", "visual-artist", "photographer", "tattoo-artist"]),
-    ("Film & video",                  &["filmmaker"]),
-    ("Performers & drag",             &["comedian", "drag", "performer"]),
-    ("Podcasters & media",            &["podcaster"]),
+    ("Musicians", &["musician"]),
+    ("DJs", &["dj"]),
+    ("Authors & historians", &["author", "historian"]),
+    (
+        "Visual artists & illustrators",
+        &[
+            "illustrator",
+            "visual-artist",
+            "photographer",
+            "tattoo-artist",
+        ],
+    ),
+    ("Film & video", &["filmmaker"]),
+    ("Performers & drag", &["comedian", "drag", "performer"]),
+    ("Podcasters & media", &["podcaster"]),
 ];
 
 pub(crate) async fn zone_creators(db: SupabaseClient, lang: &str) -> Response {
@@ -31,41 +39,55 @@ pub(crate) async fn zone_creators(db: SupabaseClient, lang: &str) -> Response {
          &order=year.desc&limit=300",
         db.url
     );
-    let (creators_res, media_res) = tokio::join!(
-        db.get_json(&url_creators),
-        db.get_json(&url_media),
-    );
+    let (creators_res, media_res) =
+        tokio::join!(db.get_json(&url_creators), db.get_json(&url_media),);
     let creators: Vec<CreatorRow> = creators_res.or_log("creators:creators_res");
     let media_all: Vec<MediaRow> = media_res.or_log("creators:media_res");
 
     let mut media_by_creator: HashMap<i64, Vec<&MediaRow>> = HashMap::new();
     for m in &media_all {
-        if let Some(cid) = m.creator_id { media_by_creator.entry(cid).or_default().push(m); }
+        if let Some(cid) = m.creator_id {
+            media_by_creator.entry(cid).or_default().push(m);
+        }
     }
 
     let creator_card = |c: &CreatorRow| -> String {
-        let id    = c.id;
-        let name  = esc(c.name.as_str());
+        let id = c.id;
+        let name = esc(c.name.as_str());
         let ctype = esc(c.creator_type.as_deref().unwrap_or("creator"));
-        let city  = esc(c.city.as_deref().unwrap_or(""));
-        let ctry  = esc(c.country.as_deref().unwrap_or(""));
-        let bio   = esc(c.bio.as_deref().unwrap_or(""));
-        let site  = esc(c.website.as_deref().unwrap_or(""));
-        let sp    = esc(c.spotify_link.as_deref().unwrap_or(""));
-        let yt    = esc(c.youtube_link.as_deref().unwrap_or(""));
-        let bc    = esc(c.bandcamp_link.as_deref().unwrap_or(""));
-        let etsy  = esc(c.etsy_link.as_deref().unwrap_or(""));
-        let ig    = esc(c.instagram.as_deref().unwrap_or(""));
+        let city = esc(c.city.as_deref().unwrap_or(""));
+        let ctry = esc(c.country.as_deref().unwrap_or(""));
+        let bio = esc(c.bio.as_deref().unwrap_or(""));
+        let site = esc(c.website.as_deref().unwrap_or(""));
+        let sp = esc(c.spotify_link.as_deref().unwrap_or(""));
+        let yt = esc(c.youtube_link.as_deref().unwrap_or(""));
+        let bc = esc(c.bandcamp_link.as_deref().unwrap_or(""));
+        let etsy = esc(c.etsy_link.as_deref().unwrap_or(""));
+        let ig = esc(c.instagram.as_deref().unwrap_or(""));
 
         let mut link_badges: Vec<String> = Vec::new();
-        if !sp.is_empty()   && sp   != "#" { link_badges.push(link_badge(&sp,   "Spotify",   "#1DB954")); }
-        if !yt.is_empty()   && yt   != "#" { link_badges.push(link_badge(&yt,   "YouTube",   "#FF0000")); }
-        if !bc.is_empty()   && bc   != "#" { link_badges.push(link_badge(&bc,   "Bandcamp",  "#1DA0C3")); }
-        if !etsy.is_empty() && etsy != "#" { link_badges.push(link_badge(&etsy, "Etsy",      "#F1641E")); }
-        if !ig.is_empty()   && ig   != "#" { link_badges.push(link_badge(&ig,   "Instagram", "#E1306C")); }
+        if !sp.is_empty() && sp != "#" {
+            link_badges.push(link_badge(&sp, "Spotify", "#1DB954"));
+        }
+        if !yt.is_empty() && yt != "#" {
+            link_badges.push(link_badge(&yt, "YouTube", "#FF0000"));
+        }
+        if !bc.is_empty() && bc != "#" {
+            link_badges.push(link_badge(&bc, "Bandcamp", "#1DA0C3"));
+        }
+        if !etsy.is_empty() && etsy != "#" {
+            link_badges.push(link_badge(&etsy, "Etsy", "#F1641E"));
+        }
+        if !ig.is_empty() && ig != "#" {
+            link_badges.push(link_badge(&ig, "Instagram", "#E1306C"));
+        }
         let site_btn = if !site.is_empty() && site != "#" {
-            format!("<a href=\"{site}\" target=\"_blank\" rel=\"noopener\" class=\"btn-t\">Site</a>")
-        } else { String::new() };
+            format!(
+                "<a href=\"{site}\" target=\"_blank\" rel=\"noopener\" class=\"btn-t\">Site</a>"
+            )
+        } else {
+            String::new()
+        };
 
         let media_html: String = media_by_creator.get(&id).map(|items| {
             items.iter().take(6).map(|m| {
@@ -111,18 +133,33 @@ pub(crate) async fn zone_creators(db: SupabaseClient, lang: &str) -> Response {
 
     let mut shown: HashSet<i64> = HashSet::new();
     for (heading, types) in SECTIONS {
-        let group: Vec<&CreatorRow> = creators.iter()
+        let group: Vec<&CreatorRow> = creators
+            .iter()
             .filter(|c| types.contains(&c.creator_type.as_deref().unwrap_or("")))
             .collect();
-        if group.is_empty() { continue; }
+        if group.is_empty() {
+            continue;
+        }
         body.push_str(&sh(heading, Some(group.len())));
-        for &c in &group { shown.insert(c.id); body.push_str(&creator_card(c)); }
+        for &c in &group {
+            shown.insert(c.id);
+            body.push_str(&creator_card(c));
+        }
     }
     let rest: Vec<&CreatorRow> = creators.iter().filter(|c| !shown.contains(&c.id)).collect();
     if !rest.is_empty() {
         body.push_str(&sh("More creators", Some(rest.len())));
-        for &c in &rest { body.push_str(&creator_card(c)); }
+        for &c in &rest {
+            body.push_str(&creator_card(c));
+        }
     }
 
-    Html(shell("Creators & Makers", "Bear community creators, by craft.", "creators", &body, lang)).into_response()
+    Html(shell(
+        "Creators & Makers",
+        "Bear community creators, by craft.",
+        "creators",
+        &body,
+        lang,
+    ))
+    .into_response()
 }

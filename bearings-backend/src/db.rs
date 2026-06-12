@@ -1,4 +1,3 @@
-
 //! Supabase client — thin wrapper over PostgREST (Supabase's REST API).
 //!
 //! ## Design choice: PostgREST vs SQLx
@@ -39,11 +38,11 @@
 //! - `post_rpc(name, body)` — call a PostgREST RPC function
 //! - `write_json_returning(method, url, body)` — write, return created rows
 
-use std::sync::Arc;
-use std::time::Duration;
-use anyhow::{Context, Result};
 use crate::cache::TtlCache;
 use crate::error::AppError;
+use anyhow::{Context, Result};
+use std::sync::Arc;
+use std::time::Duration;
 
 #[derive(Clone)]
 pub struct SupabaseClient {
@@ -57,10 +56,8 @@ pub struct SupabaseClient {
 impl SupabaseClient {
     pub fn from_env() -> Result<Self> {
         Ok(Self {
-            url: std::env::var("SUPABASE_URL")
-                .context("SUPABASE_URL not set")?,
-            anon_key: std::env::var("SUPABASE_ANON_KEY")
-                .context("SUPABASE_ANON_KEY not set")?,
+            url: std::env::var("SUPABASE_URL").context("SUPABASE_URL not set")?,
+            anon_key: std::env::var("SUPABASE_ANON_KEY").context("SUPABASE_ANON_KEY not set")?,
             service_key: std::env::var("SUPABASE_SERVICE_ROLE_KEY")
                 .context("SUPABASE_SERVICE_ROLE_KEY not set")?,
             client: reqwest::Client::builder()
@@ -75,16 +72,14 @@ impl SupabaseClient {
 
     /// Execute a GET request against the Supabase REST API and deserialise the response.
     /// Used by all read-only route handlers.
-    pub async fn get_json<T: serde::de::DeserializeOwned>(
-        &self,
-        url: &str,
-    ) -> Result<T, AppError> {
+    pub async fn get_json<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<T, AppError> {
         // Warm cache hit: skip the ~40ms PostgREST round-trip entirely.
         if let Some(body) = self.cache.get(url) {
             return serde_json::from_str(&body).map_err(|e| AppError::Internal(e.into()));
         }
 
-        let response = self.client
+        let response = self
+            .client
             .get(url)
             .header("apikey", &self.anon_key)
             .header("Authorization", format!("Bearer {}", self.anon_key))
@@ -96,9 +91,11 @@ impl SupabaseClient {
         let status = response.status();
         let body = response.text().await.map_err(AppError::Database)?;
         if !status.is_success() {
-            return Err(AppError::Internal(
-                anyhow::anyhow!("Supabase error {}: {}", status, body)
-            ));
+            return Err(AppError::Internal(anyhow::anyhow!(
+                "Supabase error {}: {}",
+                status,
+                body
+            )));
         }
 
         let value = serde_json::from_str::<T>(&body).map_err(|e| AppError::Internal(e.into()))?;
@@ -115,7 +112,8 @@ impl SupabaseClient {
         body: &B,
     ) -> Result<T, AppError> {
         let url = format!("{}/rest/v1/rpc/{}", self.url, rpc_name);
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .header("apikey", &self.anon_key)
             .header("Authorization", format!("Bearer {}", self.anon_key))
@@ -128,9 +126,11 @@ impl SupabaseClient {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AppError::Internal(
-                anyhow::anyhow!("Supabase RPC error {}: {}", status, body)
-            ));
+            return Err(AppError::Internal(anyhow::anyhow!(
+                "Supabase RPC error {}: {}",
+                status,
+                body
+            )));
         }
 
         response.json::<T>().await.map_err(AppError::Database)
@@ -144,7 +144,8 @@ impl SupabaseClient {
         url: &str,
         body: &B,
     ) -> Result<Vec<serde_json::Value>, AppError> {
-        let response = self.client
+        let response = self
+            .client
             .request(method, url)
             .header("apikey", &self.service_key)
             .header("Authorization", format!("Bearer {}", self.service_key))

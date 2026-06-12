@@ -1,22 +1,26 @@
 //! Zone: admin
 
-use axum::response::{Html, IntoResponse, Response};
+use super::super::query::*;
 use crate::db::LogErr;
 use crate::{db::SupabaseClient, ui::*};
+use axum::response::{Html, IntoResponse, Response};
 #[allow(unused_imports)]
 use chrono::{Months, Utc};
 #[allow(unused_imports)]
 use std::collections::HashMap;
-use super::super::query::*;
 
 pub(crate) async fn zone_admin(db: SupabaseClient, token: Option<String>, lang: &str) -> Response {
-    let expected = std::env::var("ADMIN_TOKEN")
-        .unwrap_or_else(|_| "bearings-admin".to_string());
+    let expected = std::env::var("ADMIN_TOKEN").unwrap_or_else(|_| "bearings-admin".to_string());
     // Timing-safe token check: compare all bytes regardless of early mismatch
     // to mitigate timing oracle attacks on the token.
     fn token_eq(a: &str, b: &str) -> bool {
-        if a.len() != b.len() { return false; }
-        a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+        if a.len() != b.len() {
+            return false;
+        }
+        a.bytes()
+            .zip(b.bytes())
+            .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+            == 0
     }
     if !token_eq(token.as_deref().unwrap_or(""), &expected) {
         return Html("<html><body style=\"font-family:sans-serif;padding:40px\"><h2>Bearings Admin</h2><p>Pass <code>?zone=admin&amp;token=YOUR_TOKEN</code></p></body></html>".to_string()).into_response();
@@ -37,7 +41,7 @@ pub(crate) async fn zone_admin(db: SupabaseClient, token: Option<String>, lang: 
     );
 
     let candidates = cands_res.or_log("admin:cands_res");
-    let feeds      = feeds_res.or_log("admin:feeds_res");
+    let feeds = feeds_res.or_log("admin:feeds_res");
 
     let feed_rows: String = feeds.iter().map(|f| {
         let name    = esc(f.org_name.as_deref().unwrap_or(""));

@@ -1,4 +1,3 @@
-
 //! NOW zone — the "here and now" composite endpoint.
 //!
 //! A single call returns everything the NOW zone needs:
@@ -18,10 +17,10 @@
 //!   lat, lng    — bear's current location (from browser geolocation or IP)
 //!   radius_km   — how far to search (default 500km for events, 50km for venues)
 
+use crate::{db::SupabaseClient, error::AppError};
 use axum::extract::{Query, State};
 use axum::Json;
 use serde::Deserialize;
-use crate::{db::SupabaseClient, error::AppError};
 
 #[derive(Deserialize)]
 pub struct NowQuery {

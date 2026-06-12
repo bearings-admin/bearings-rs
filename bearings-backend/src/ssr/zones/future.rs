@@ -1,9 +1,9 @@
 //! Zone: future
 
-use axum::response::{Html, IntoResponse, Response};
+use super::super::query::*;
 use crate::db::LogErr;
 use crate::{db::SupabaseClient, ui::*};
-use super::super::query::*;
+use axum::response::{Html, IntoResponse, Response};
 #[allow(unused_imports)]
 use chrono::{Months, Utc};
 #[allow(unused_imports)]
@@ -241,9 +241,11 @@ pub(crate) async fn zone_future(db: SupabaseClient, lang: &str) -> Response {
         </div>"
     );
 
-            let h3 = format!("<div style=\"font-size:14px;font-weight:700;color:{BROWN};margin:12px 0 6px;\
-               border-left:3px solid {ORANGE};padding-left:8px\">New Bear Territories</div>");
-            let h4 = format!("<div style=\"font-size:14px;font-weight:700;color:{BROWN};margin:12px 0 6px;\
+    let h3 = format!(
+        "<div style=\"font-size:14px;font-weight:700;color:{BROWN};margin:12px 0 6px;\
+               border-left:3px solid {ORANGE};padding-left:8px\">New Bear Territories</div>"
+    );
+    let h4 = format!("<div style=\"font-size:14px;font-weight:700;color:{BROWN};margin:12px 0 6px;\
                border-left:3px solid {GOLD};padding-left:8px\">What Could Be \
                <span style=\"font-size:11px;font-weight:400;color:{MID}\">· upvote to sort</span></div>");
     let body = format!(
@@ -274,7 +276,12 @@ pub(crate) async fn zone_future(db: SupabaseClient, lang: &str) -> Response {
             format!("<div style=\"font-size:12px;color:{MID};padding:8px\">No recent titleholders.</div>")
         } else { String::new() },
     );
-    Html(shell("Bear Future", "Community direction and what comes next.", "future", &body, lang)).into_response()
+    Html(shell(
+        "Bear Future",
+        "Community direction and what comes next.",
+        "future",
+        &body,
+        lang,
+    ))
+    .into_response()
 }
-
-

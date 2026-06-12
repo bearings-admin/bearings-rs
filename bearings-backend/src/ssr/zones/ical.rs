@@ -1,7 +1,7 @@
 //! Zone: ical
 
-use axum::response::{Html, IntoResponse, Response};
 use crate::ui::*;
+use axum::response::{Html, IntoResponse, Response};
 #[allow(unused_imports)]
 use chrono::{Months, Utc};
 #[allow(unused_imports)]
@@ -49,16 +49,22 @@ pub(crate) async fn zone_ical(lang: &str) -> Response {
         </div>",
         country_rows = [
             ("Worldwide", ""),
-            ("Canada",    "Canada"),
-            ("USA",       "USA"),
-            ("Germany",   "Germany"),
-            ("Netherlands","Netherlands"),
-            ("UK",        "UK"),
+            ("Canada", "Canada"),
+            ("USA", "USA"),
+            ("Germany", "Germany"),
+            ("Netherlands", "Netherlands"),
+            ("UK", "UK"),
             ("Australia", "Australia"),
-            ("Brazil",    "Brazil"),
-            ("Spain",     "Spain"),
-        ].iter().map(|(label, c)| {
-            let qs = if c.is_empty() { String::new() } else { format!("?country={c}") };
+            ("Brazil", "Brazil"),
+            ("Spain", "Spain"),
+        ]
+        .iter()
+        .map(|(label, c)| {
+            let qs = if c.is_empty() {
+                String::new()
+            } else {
+                format!("?country={c}")
+            };
             format!(
                 "<div style=\"display:flex;justify-content:space-between;align-items:center;\
                   padding:4px 0;border-bottom:1px solid {OFF_WHITE}\">\
@@ -67,11 +73,17 @@ pub(crate) async fn zone_ical(lang: &str) -> Response {
                     download>ics</a>\
                 </div>",
                 label = label,
-                qs    = qs,
+                qs = qs,
             )
-        }).collect::<String>(),
+        })
+        .collect::<String>(),
     );
-    Html(shell("iCal Export", "Subscribe to bear events in your calendar.", "ical", &body, lang)).into_response()
+    Html(shell(
+        "iCal Export",
+        "Subscribe to bear events in your calendar.",
+        "ical",
+        &body,
+        lang,
+    ))
+    .into_response()
 }
-
-

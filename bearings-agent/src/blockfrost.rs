@@ -1,4 +1,3 @@
-
 //! Blockfrost API wrapper — read-only Cardano wallet surveillance.
 //! API docs: https://docs.blockfrost.io
 //! Free tier: 50,000 requests/day — sufficient for hourly monitoring.
@@ -10,9 +9,9 @@
 //! Blockfrost response shapes are documented at docs.blockfrost.io/api
 //! The address endpoint returns an array of amounts (one per asset, lovelace first).
 
+use crate::error::AgentError;
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use crate::error::AgentError;
 
 pub struct BlockfrostClient {
     project_id: String,
@@ -31,7 +30,7 @@ pub struct AddressInfo {
     pub amount: Vec<AssetAmount>,
     pub stake_address: Option<String>,
     #[serde(rename = "type")]
-    pub address_type: String,  // "shelley" or "byron"
+    pub address_type: String, // "shelley" or "byron"
     pub managed: Option<bool>,
 }
 
@@ -55,7 +54,7 @@ pub struct AddressTransaction {
     pub tx_hash: String,
     pub tx_index: u32,
     pub block_height: u64,
-    pub block_time: i64,  // Unix timestamp
+    pub block_time: i64, // Unix timestamp
 }
 
 /// Transaction UTXO detail from GET /txs/{hash}/utxos
@@ -93,7 +92,8 @@ impl BlockfrostClient {
     /// Get full address info including lovelace balance.
     pub async fn address_info(&self, address: &str) -> Result<AddressInfo, AgentError> {
         let url = format!("{}/addresses/{}", self.base_url, address);
-        let info: AddressInfo = self.client
+        let info: AddressInfo = self
+            .client
             .get(&url)
             .headers(self.headers())
             .send()
@@ -106,7 +106,9 @@ impl BlockfrostClient {
     /// Get the ADA balance in lovelace (1 ADA = 1,000,000 lovelace).
     pub async fn wallet_balance_lovelace(&self, address: &str) -> Result<u64, AgentError> {
         let info = self.address_info(address).await?;
-        let lovelace = info.amount.iter()
+        let lovelace = info
+            .amount
+            .iter()
             .find(|a| a.unit == "lovelace")
             .map(|a| a.quantity_u64())
             .unwrap_or(0);
@@ -129,7 +131,8 @@ impl BlockfrostClient {
             "{}/addresses/{}/transactions?order=desc&count={}",
             self.base_url, address, count
         );
-        let txs: Vec<AddressTransaction> = self.client
+        let txs: Vec<AddressTransaction> = self
+            .client
             .get(&url)
             .headers(self.headers())
             .send()
@@ -143,7 +146,8 @@ impl BlockfrostClient {
     /// Used to determine the ADA amount received by our wallet.
     pub async fn tx_utxos(&self, tx_hash: &str) -> Result<TxUtxos, AgentError> {
         let url = format!("{}/txs/{}/utxos", self.base_url, tx_hash);
-        let utxos: TxUtxos = self.client
+        let utxos: TxUtxos = self
+            .client
             .get(&url)
             .headers(self.headers())
             .send()
@@ -156,13 +160,17 @@ impl BlockfrostClient {
     /// Calculate the net ADA received by a specific address in a transaction.
     /// Sums outputs to the address, subtracts inputs from the address.
     pub fn net_received(&self, utxos: &TxUtxos, our_address: &str) -> f64 {
-        let received: u64 = utxos.outputs.iter()
+        let received: u64 = utxos
+            .outputs
+            .iter()
             .filter(|o| o.address == our_address)
             .flat_map(|o| o.amount.iter().filter(|a| a.unit == "lovelace"))
             .map(|a| a.quantity_u64())
             .sum();
 
-        let sent: u64 = utxos.inputs.iter()
+        let sent: u64 = utxos
+            .inputs
+            .iter()
             .filter(|i| i.address == our_address)
             .flat_map(|i| i.amount.iter().filter(|a| a.unit == "lovelace"))
             .map(|a| a.quantity_u64())

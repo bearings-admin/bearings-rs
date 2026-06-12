@@ -10,10 +10,15 @@
 //! Hand-rolled rather than pulled from an SDK on purpose: the surface is tiny, it adds
 //! no dependency, and a reviewer can see exactly how MCP maps onto our data layer.
 
-use axum::{extract::State, http::StatusCode, response::{IntoResponse, Response}, Json};
-use serde_json::{json, Value};
 use crate::db::SupabaseClient;
 use crate::repositories::clause;
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
+use serde_json::{json, Value};
 
 /// MCP protocol revision we default to (we echo the client's if it sends one).
 const PROTOCOL_VERSION: &str = "2025-06-18";
@@ -108,39 +113,66 @@ const REGISTRY: &[Tool] = &[
 fn input_schema(t: &Tool) -> Value {
     let mut props = serde_json::Map::new();
     for (param, _col, _op, desc) in t.filters {
-        props.insert((*param).to_string(), json!({"type": "string", "description": desc}));
+        props.insert(
+            (*param).to_string(),
+            json!({"type": "string", "description": desc}),
+        );
     }
-    props.insert("limit".into(), json!({"type": "integer", "description": "Max rows (default 50, max 200)."}));
+    props.insert(
+        "limit".into(),
+        json!({"type": "integer", "description": "Max rows (default 50, max 200)."}),
+    );
     json!({"type": "object", "properties": props, "additionalProperties": false})
 }
 
 fn tool_descriptors() -> Value {
-    let list: Vec<Value> = REGISTRY.iter().map(|t| json!({
-        "name": t.name,
-        "description": t.description,
-        "inputSchema": input_schema(t),
-    })).collect();
+    let list: Vec<Value> = REGISTRY
+        .iter()
+        .map(|t| {
+            json!({
+                "name": t.name,
+                "description": t.description,
+                "inputSchema": input_schema(t),
+            })
+        })
+        .collect();
     json!({ "tools": list })
 }
 
 /// Execute a tool: build a safe PostgREST query from the spec + arguments, fetch JSON.
 async fn call_tool(db: &SupabaseClient, name: &str, args: &Value) -> Result<Value, String> {
-    let tool = REGISTRY.iter().find(|t| t.name == name)
+    let tool = REGISTRY
+        .iter()
+        .find(|t| t.name == name)
         .ok_or_else(|| format!("unknown tool: {name}"))?;
 
     let mut parts: Vec<String> = Vec::new();
-    if !tool.base.is_empty() { parts.push(tool.base.to_string()); }
+    if !tool.base.is_empty() {
+        parts.push(tool.base.to_string());
+    }
     for (param, col, op, _desc) in tool.filters {
         if let Some(v) = args.get(param).and_then(Value::as_str) {
-            if v.is_empty() { continue; }
-            let value = if *op == "ilike" { format!("*{v}*") } else { v.to_string() };
+            if v.is_empty() {
+                continue;
+            }
+            let value = if *op == "ilike" {
+                format!("*{v}*")
+            } else {
+                v.to_string()
+            };
             // clause() percent-encodes the value (injection-safe); drop its leading '&'.
             parts.push(clause(col, op, &value).trim_start_matches('&').to_string());
         }
     }
     parts.push(format!("select={}", tool.select));
-    if !tool.order.is_empty() { parts.push(format!("order={}", tool.order)); }
-    let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(50).clamp(1, 200);
+    if !tool.order.is_empty() {
+        parts.push(format!("order={}", tool.order));
+    }
+    let limit = args
+        .get("limit")
+        .and_then(Value::as_u64)
+        .unwrap_or(50)
+        .clamp(1, 200);
     parts.push(format!("limit={limit}"));
 
     let url = format!("{}/rest/v1/{}?{}", db.url, tool.table, parts.join("&"));
@@ -151,14 +183,19 @@ async fn call_tool(db: &SupabaseClient, name: &str, args: &Value) -> Result<Valu
     }))
 }
 
-fn ok(id: Value, result: Value) -> Value { json!({"jsonrpc": "2.0", "id": id, "result": result}) }
+fn ok(id: Value, result: Value) -> Value {
+    json!({"jsonrpc": "2.0", "id": id, "result": result})
+}
 fn rpc_err(id: Value, code: i64, message: &str) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}})
 }
 
 /// `POST /mcp` — JSON-RPC 2.0 dispatcher for the MCP methods we support.
 pub async fn mcp_handler(State(db): State<SupabaseClient>, Json(req): Json<Value>) -> Response {
-    let method = req.get("method").and_then(Value::as_str).unwrap_or_default();
+    let method = req
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
 
     // Notifications (no `id`) are acknowledged with 202 and no body.
     let Some(id) = req.get("id").cloned() else {
@@ -167,26 +204,40 @@ pub async fn mcp_handler(State(db): State<SupabaseClient>, Json(req): Json<Value
 
     let resp = match method {
         "initialize" => {
-            let pv = req.get("params").and_then(|p| p.get("protocolVersion"))
-                .and_then(Value::as_str).unwrap_or(PROTOCOL_VERSION);
-            ok(id, json!({
-                "protocolVersion": pv,
-                "capabilities": { "tools": {} },
-                "serverInfo": { "name": "bearings", "version": env!("CARGO_PKG_VERSION") },
-                "instructions": "Read-only access to the Bearings gay-bear community directory. Call tools/list to discover queries."
-            }))
+            let pv = req
+                .get("params")
+                .and_then(|p| p.get("protocolVersion"))
+                .and_then(Value::as_str)
+                .unwrap_or(PROTOCOL_VERSION);
+            ok(
+                id,
+                json!({
+                    "protocolVersion": pv,
+                    "capabilities": { "tools": {} },
+                    "serverInfo": { "name": "bearings", "version": env!("CARGO_PKG_VERSION") },
+                    "instructions": "Read-only access to the Bearings gay-bear community directory. Call tools/list to discover queries."
+                }),
+            )
         }
         "ping" => ok(id, json!({})),
         "tools/list" => ok(id, tool_descriptors()),
         "tools/call" => {
             let params = req.get("params").cloned().unwrap_or_else(|| json!({}));
-            let name = params.get("name").and_then(Value::as_str).unwrap_or_default();
-            let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+            let name = params
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let args = params
+                .get("arguments")
+                .cloned()
+                .unwrap_or_else(|| json!({}));
             // Tool failures are returned as an MCP result with isError=true (not a
             // protocol error), so the client surfaces them to the model.
             let result = match call_tool(&db, name, &args).await {
                 Ok(r) => r,
-                Err(e) => json!({"content": [{"type": "text", "text": format!("Error: {e}")}], "isError": true}),
+                Err(e) => {
+                    json!({"content": [{"type": "text", "text": format!("Error: {e}")}], "isError": true})
+                }
             };
             ok(id, result)
         }
@@ -196,7 +247,9 @@ pub async fn mcp_handler(State(db): State<SupabaseClient>, Json(req): Json<Value
 }
 
 /// `GET /mcp` — we don't offer a server-initiated SSE stream; say so per spec.
-pub async fn mcp_get() -> StatusCode { StatusCode::METHOD_NOT_ALLOWED }
+pub async fn mcp_get() -> StatusCode {
+    StatusCode::METHOD_NOT_ALLOWED
+}
 
 #[cfg(test)]
 mod tests {

@@ -1,20 +1,29 @@
 //! Zone: places
 
-use axum::response::{Html, IntoResponse, Response};
+use super::super::query::*;
 use crate::db::LogErr;
 use crate::{db::SupabaseClient, ui::*};
+use axum::response::{Html, IntoResponse, Response};
 #[allow(unused_imports)]
 use chrono::{Months, Utc};
 #[allow(unused_imports)]
 use std::collections::HashMap;
-use super::super::query::*;
 
-pub(crate) async fn zone_places(db: SupabaseClient, filter_type: Option<String>, filter_country: Option<String>, lang: &str) -> Response {
+pub(crate) async fn zone_places(
+    db: SupabaseClient,
+    filter_type: Option<String>,
+    filter_country: Option<String>,
+    lang: &str,
+) -> Response {
     let ft = esc(filter_type.as_deref().unwrap_or(""));
     let fc = esc(filter_country.as_deref().unwrap_or(""));
 
     // Fetch ALL places for country (for tab counts) — no type filter
-    let cc = if !fc.is_empty() { format!("&country=eq.{fc}") } else { String::new() };
+    let cc = if !fc.is_empty() {
+        format!("&country=eq.{fc}")
+    } else {
+        String::new()
+    };
     let url_all = format!(
         "{}/rest/v1/places?active=eq.true\
          &select=place_type,country\
@@ -23,7 +32,11 @@ pub(crate) async fn zone_places(db: SupabaseClient, filter_type: Option<String>,
         db.url
     );
     // Fetch filtered places for display
-    let tc = if !ft.is_empty() { format!("&place_type=eq.{ft}") } else { String::new() };
+    let tc = if !ft.is_empty() {
+        format!("&place_type=eq.{ft}")
+    } else {
+        String::new()
+    };
     let url_filtered = format!(
         "{}/rest/v1/places?active=eq.true\
          &select=name,place_type,city,country,address,hours_open,website,\
@@ -36,8 +49,8 @@ pub(crate) async fn zone_places(db: SupabaseClient, filter_type: Option<String>,
         db.get_json::<Vec<PlaceRow>>(&url_all),
         db.get_json::<Vec<PlaceRow>>(&url_filtered),
     );
-    let all_places      = all_res.or_log("places:all_res");
-    let places          = filtered_res.or_log("places:filtered_res");
+    let all_places = all_res.or_log("places:all_res");
+    let places = filtered_res.or_log("places:filtered_res");
 
     // Count per type across all (country-filtered) places
     let mut type_counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
@@ -48,35 +61,50 @@ pub(crate) async fn zone_places(db: SupabaseClient, filter_type: Option<String>,
     let total_all = all_places.len();
 
     // Unique countries from ALL places
-    let mut countries: Vec<String> = all_places.iter()
+    let mut countries: Vec<String> = all_places
+        .iter()
         .filter_map(|p| p.country.clone())
-        .collect::<std::collections::HashSet<_>>().into_iter().collect();
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
     countries.sort();
 
     // Tab definitions — (slug, label, icon)
     let type_tabs: &[(&str, &str, &str)] = &[
-        ("",                "All",      "🗺"),
-        ("bar",             "Bar",      "🍺"),
-        ("leather-bar",     "Leather",  "🧤"),
-        ("sauna-bathhouse", "Sauna",    "♨"),
-        ("campground",      "Camp",     "🏕"),
-        ("party-venue",     "Party",    "🎉"),
-        ("resort",          "Resort",   "🛖"),
-        ("hotel",           "Hotel",    "🏨"),
-        ("cruise-ship",     "Cruise",   "🚢"),
+        ("", "All", "🗺"),
+        ("bar", "Bar", "🍺"),
+        ("leather-bar", "Leather", "🧤"),
+        ("sauna-bathhouse", "Sauna", "♨"),
+        ("campground", "Camp", "🏕"),
+        ("party-venue", "Party", "🎉"),
+        ("resort", "Resort", "🛖"),
+        ("hotel", "Hotel", "🏨"),
+        ("cruise-ship", "Cruise", "🚢"),
     ];
 
-    let tabs_html: String = type_tabs.iter().filter_map(|(slug, label, icon)| {
-        let count = if slug.is_empty() { total_all } else { *type_counts.get(*slug).unwrap_or(&0) };
-        if count == 0 && !slug.is_empty() { return None; }  // hide empty tabs
-        let on     = *slug == ft;
-        let bg     = if on { ORANGE } else { OFF_WHITE };
-        let fg     = if on { "#fff" }  else { BROWN };
-        let border = if on { ORANGE }  else { TAN };
-        let fw     = if on { "700" }   else { "400" };
-        let country_qs = if !fc.is_empty() { format!("&place_country={fc}") } else { String::new() };
-        Some(format!(
-            "<a href=\"/?zone=places&place_type={slug}&lang={lang}{cqs}\" \
+    let tabs_html: String = type_tabs
+        .iter()
+        .filter_map(|(slug, label, icon)| {
+            let count = if slug.is_empty() {
+                total_all
+            } else {
+                *type_counts.get(*slug).unwrap_or(&0)
+            };
+            if count == 0 && !slug.is_empty() {
+                return None;
+            } // hide empty tabs
+            let on = *slug == ft;
+            let bg = if on { ORANGE } else { OFF_WHITE };
+            let fg = if on { "#fff" } else { BROWN };
+            let border = if on { ORANGE } else { TAN };
+            let fw = if on { "700" } else { "400" };
+            let country_qs = if !fc.is_empty() {
+                format!("&place_country={fc}")
+            } else {
+                String::new()
+            };
+            Some(format!(
+                "<a href=\"/?zone=places&place_type={slug}&lang={lang}{cqs}\" \
                style=\"display:inline-flex;flex-direction:column;align-items:center;\
                        gap:1px;text-decoration:none;padding:7px 10px;\
                        border-radius:12px;border:1px solid {border};\
@@ -86,18 +114,23 @@ pub(crate) async fn zone_places(db: SupabaseClient, filter_type: Option<String>,
               <span style=\"font-size:10px\">{label}</span>\
               <span style=\"font-size:9px;opacity:.8\">{count}</span>\
             </a>",
-            cqs = country_qs,
-        ))
-    }).collect();
+                cqs = country_qs,
+            ))
+        })
+        .collect();
 
     // Country dropdown
-    let ctry_opts: Vec<(String, String)> = std::iter::once(("".to_string(), "🌍 All regions".to_string()))
-        .chain(countries.iter().map(|c| (c.clone(), c.clone())))
+    let ctry_opts: Vec<(String, String)> =
+        std::iter::once(("".to_string(), "🌍 All regions".to_string()))
+            .chain(countries.iter().map(|c| (c.clone(), c.clone())))
+            .collect();
+    let ctry_sel: String = ctry_opts
+        .iter()
+        .map(|(v, l)| {
+            let sel = if v.as_str() == fc { " selected" } else { "" };
+            format!("<option value=\"{v}\"{sel}>{l}</option>")
+        })
         .collect();
-    let ctry_sel: String = ctry_opts.iter().map(|(v, l)| {
-        let sel = if v.as_str() == fc { " selected" } else { "" };
-        format!("<option value=\"{v}\"{sel}>{l}</option>")
-    }).collect();
     let sel_style = format!(
         "font-size:12px;padding:6px 12px;border-radius:20px;\
          border:1px solid {TAN};background:{OFF_WHITE};color:{DARK};\
@@ -105,37 +138,79 @@ pub(crate) async fn zone_places(db: SupabaseClient, filter_type: Option<String>,
     );
 
     // Place type label for the active filter
-    let type_label = type_tabs.iter()
+    let type_label = type_tabs
+        .iter()
         .find(|(s, _, _)| *s == ft)
         .map(|(_, l, _)| *l)
         .unwrap_or("All");
-    let region_label = if fc.is_empty() { "worldwide".to_string() } else { fc.to_string() };
+    let region_label = if fc.is_empty() {
+        "worldwide".to_string()
+    } else {
+        fc.to_string()
+    };
 
     // Region grouping definitions (same optgroups as coming-up country selector)
     let place_regions: &[(&str, &[&str])] = &[
-        ("North America",        &["Canada","USA","Mexico","Puerto Rico"]),
-        ("Europe",               &["Belgium","Czech Republic","Estonia","France","Germany",
-                                    "Iceland","Ireland","Italy","Luxembourg","Netherlands",
-                                    "Norway","Poland","Portugal","Scotland","Spain","Sweden",
-                                    "Switzerland","UK"]),
-        ("Asia Pacific",         &["Australia","Japan","New Zealand","South Korea","Taiwan","Thailand"]),
-        ("Latin America",        &["Argentina","Brazil","Chile","Colombia"]),
-        ("Africa & Middle East", &["Egypt","Morocco","South Africa"]),
+        ("North America", &["Canada", "USA", "Mexico", "Puerto Rico"]),
+        (
+            "Europe",
+            &[
+                "Belgium",
+                "Czech Republic",
+                "Estonia",
+                "France",
+                "Germany",
+                "Iceland",
+                "Ireland",
+                "Italy",
+                "Luxembourg",
+                "Netherlands",
+                "Norway",
+                "Poland",
+                "Portugal",
+                "Scotland",
+                "Spain",
+                "Sweden",
+                "Switzerland",
+                "UK",
+            ],
+        ),
+        (
+            "Asia Pacific",
+            &[
+                "Australia",
+                "Japan",
+                "New Zealand",
+                "South Korea",
+                "Taiwan",
+                "Thailand",
+            ],
+        ),
+        (
+            "Latin America",
+            &["Argentina", "Brazil", "Chile", "Colombia"],
+        ),
+        (
+            "Africa & Middle East",
+            &["Egypt", "Morocco", "South Africa"],
+        ),
     ];
-
 
     // Group places by type for display when "All" is selected + no country, else by type or flat
     let items_html: String = if ft.is_empty() && fc.is_empty() {
         // All types, all countries — group by region, then by type within region
         let mut out = String::new();
         for (region, countries) in place_regions {
-            let region_places: Vec<&PlaceRow> = places.iter()
+            let region_places: Vec<&PlaceRow> = places
+                .iter()
                 .filter(|p| {
                     let c = p.country.as_deref().unwrap_or("");
                     countries.contains(&c)
                 })
                 .collect();
-            if region_places.is_empty() { continue; }
+            if region_places.is_empty() {
+                continue;
+            }
 
             out.push_str(&format!(
                 "<div style=\"font-size:12px;font-weight:700;color:{BROWN};margin:18px 0 8px;\
@@ -146,32 +221,43 @@ pub(crate) async fn zone_places(db: SupabaseClient, filter_type: Option<String>,
 
             // Sub-group by type within region
             for (slug, label, icon) in type_tabs.iter() {
-                if slug.is_empty() { continue; }
-                let group: Vec<&PlaceRow> = region_places.iter()
+                if slug.is_empty() {
+                    continue;
+                }
+                let group: Vec<&PlaceRow> = region_places
+                    .iter()
                     .filter(|p| p.place_type.as_deref().unwrap_or("") == *slug)
                     .cloned()
                     .collect();
-                if group.is_empty() { continue; }
+                if group.is_empty() {
+                    continue;
+                }
                 out.push_str(&format!(
                     "<div style=\"font-size:10px;font-weight:600;text-transform:uppercase;\
                       letter-spacing:.08em;color:{MID};margin:10px 0 4px\">{icon} {label} ({n})</div>",
                     n = group.len(),
                 ));
-                for p in &group { out.push_str(&place_card(p)); }
+                for p in &group {
+                    out.push_str(&place_card(p));
+                }
             }
 
             // Any uncategorised
-            let other: Vec<&PlaceRow> = region_places.iter()
+            let other: Vec<&PlaceRow> = region_places
+                .iter()
                 .filter(|p| {
                     let pt = p.place_type.as_deref().unwrap_or("");
                     !type_tabs.iter().any(|(s, _, _)| !s.is_empty() && *s == pt)
                 })
                 .cloned()
                 .collect();
-            for p in &other { out.push_str(&place_card(p)); }
+            for p in &other {
+                out.push_str(&place_card(p));
+            }
         }
         // Any countries not in the region list
-        let other_places: Vec<&PlaceRow> = places.iter()
+        let other_places: Vec<&PlaceRow> = places
+            .iter()
             .filter(|p| {
                 let c = p.country.as_deref().unwrap_or("");
                 !place_regions.iter().any(|(_, cs)| cs.contains(&c))
@@ -180,8 +266,11 @@ pub(crate) async fn zone_places(db: SupabaseClient, filter_type: Option<String>,
         if !other_places.is_empty() {
             out.push_str(&format!(
                 "<div style=\"font-size:12px;font-weight:700;color:{BROWN};margin:18px 0 8px;\
-                  border-left:3px solid {TAN};padding-left:8px\">Other</div>"));
-            for p in &other_places { out.push_str(&place_card(p)); }
+                  border-left:3px solid {TAN};padding-left:8px\">Other</div>"
+            ));
+            for p in &other_places {
+                out.push_str(&place_card(p));
+            }
         }
         out
     } else if ft.is_empty() && !fc.is_empty() {
@@ -229,27 +318,38 @@ pub(crate) async fn zone_places(db: SupabaseClient, filter_type: Option<String>,
         } else { String::new() },
         n = places.len(),
     );
-    Html(shell("Places", "Bear bars, saunas, campgrounds worldwide.", "places", &body, lang)).into_response()
+    Html(shell(
+        "Places",
+        "Bear bars, saunas, campgrounds worldwide.",
+        "places",
+        &body,
+        lang,
+    ))
+    .into_response()
 }
 
 pub(crate) fn place_card(p: &PlaceRow) -> String {
-    let name  = esc(p.name.as_str());
+    let name = esc(p.name.as_str());
     let ptype = esc(p.place_type.as_deref().unwrap_or(""));
-    let city  = esc(p.city.as_deref().unwrap_or(""));
-    let ctry  = esc(p.country.as_deref().unwrap_or(""));
-    let addr  = esc(p.address.as_deref().unwrap_or(""));
+    let city = esc(p.city.as_deref().unwrap_or(""));
+    let ctry = esc(p.country.as_deref().unwrap_or(""));
+    let addr = esc(p.address.as_deref().unwrap_or(""));
     let hours = esc(p.hours_open.as_deref().unwrap_or(""));
-    let site  = esc(p.website.as_deref().unwrap_or(""));
-    let book  = esc(p.booking_link.as_deref().unwrap_or(""));
-    let bn    = esc(p.bear_night_schedule.as_deref().unwrap_or(""));
-    let pop   = p.bear_popular.unwrap_or(false);
+    let site = esc(p.website.as_deref().unwrap_or(""));
+    let book = esc(p.booking_link.as_deref().unwrap_or(""));
+    let bn = esc(p.bear_night_schedule.as_deref().unwrap_or(""));
+    let pop = p.bear_popular.unwrap_or(false);
     let fs: Vec<String> = p.inclusion_flag_codes.clone().unwrap_or_default();
     let site_html = if !site.is_empty() && site != "#" {
         format!("<a href=\"{site}\" target=\"_blank\" rel=\"noopener\" class=\"btn-t\">Site</a>")
-    } else { String::new() };
+    } else {
+        String::new()
+    };
     let book_html = if !book.is_empty() && book != "#" {
         format!("<a href=\"{book}\" target=\"_blank\" rel=\"noopener\" class=\"btn-o\">Book</a>")
-    } else { String::new() };
+    } else {
+        String::new()
+    };
     card(&format!(
         "<div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:10px\">\
           <div style=\"flex:1;min-width:0\">\
@@ -278,5 +378,3 @@ pub(crate) fn place_card(p: &PlaceRow) -> String {
         fhtml    = flags(&fs),
     ))
 }
-
-

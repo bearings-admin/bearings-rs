@@ -21,50 +21,50 @@ use serde::Deserialize;
 /// Rust-side dedup in zone_now guards against the view returning duplicates.
 #[derive(Debug, Clone, serde::Deserialize)]
 pub(crate) struct CurrentHolder {
-    pub title_name:        String,
-    pub holder_name:       String,
-    pub holder_status:     Option<String>,
-    pub display_status:    Option<String>,
-    pub year:              Option<i32>,
-    pub city:              Option<String>,
-    pub country:           Option<String>,
+    pub title_name: String,
+    pub holder_name: String,
+    pub holder_status: Option<String>,
+    pub display_status: Option<String>,
+    pub year: Option<i32>,
+    pub city: Option<String>,
+    pub country: Option<String>,
     pub competition_scope: Option<String>,
-    pub competition_name:  Option<String>,
+    pub competition_name: Option<String>,
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct EventRow {
-    pub name:                   String,
-    pub city:                   Option<String>,
-    pub country:                Option<String>,
-    pub start_date:             Option<String>,
-    pub end_date:               Option<String>,
+    pub name: String,
+    pub city: Option<String>,
+    pub country: Option<String>,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
     #[serde(rename = "type")]
-    pub event_type:             Option<String>,
-    pub hot:                    Option<bool>,
-    pub link:                   Option<String>,
-    pub description:            Option<String>,
-    pub event_mode:             Option<String>,
-    pub inclusion_flag_codes:   Option<Vec<String>>,
+    pub event_type: Option<String>,
+    pub hot: Option<bool>,
+    pub link: Option<String>,
+    pub description: Option<String>,
+    pub event_mode: Option<String>,
+    pub inclusion_flag_codes: Option<Vec<String>>,
 }
 
 // ── Campaigns ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct CampaignRow {
-    pub name:        String,
-    pub org:         Option<String>,
+    pub name: String,
+    pub org: Option<String>,
     pub description: Option<String>,
-    pub link:        Option<String>,
-    pub goal:        Option<f64>,
-    pub raised:      Option<f64>,
-    pub currency:    Option<String>,
-    pub urgent:      Option<bool>,
-    pub ends_at:     Option<String>,
-    pub cause:         Option<String>,
-    pub donate_url:    Option<String>,
+    pub link: Option<String>,
+    pub goal: Option<f64>,
+    pub raised: Option<f64>,
+    pub currency: Option<String>,
+    pub urgent: Option<bool>,
+    pub ends_at: Option<String>,
+    pub cause: Option<String>,
+    pub donate_url: Option<String>,
     pub usdc_accepted: Option<bool>,
 }
 
@@ -72,30 +72,30 @@ pub(crate) struct CampaignRow {
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct PlaceRow {
-    pub name:                  String,
-    pub place_type:            Option<String>,
-    pub city:                  Option<String>,
-    pub country:               Option<String>,
-    pub address:               Option<String>,
-    pub hours_open:            Option<String>,
-    pub website:               Option<String>,
-    pub booking_link:          Option<String>,
-    pub bear_night_schedule:   Option<String>,
-    pub bear_popular:          Option<bool>,
-    pub inclusion_flag_codes:  Option<Vec<String>>,
+    pub name: String,
+    pub place_type: Option<String>,
+    pub city: Option<String>,
+    pub country: Option<String>,
+    pub address: Option<String>,
+    pub hours_open: Option<String>,
+    pub website: Option<String>,
+    pub booking_link: Option<String>,
+    pub bear_night_schedule: Option<String>,
+    pub bear_popular: Option<bool>,
+    pub inclusion_flag_codes: Option<Vec<String>>,
 }
 
 // ── Clubs ─────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct ClubRow {
-    pub id:           Option<i64>,
-    pub name:         String,
-    pub city:         Option<String>,
-    pub country:      Option<String>,
-    pub club_type:    Option<String>,
-    pub description:  Option<String>,
-    pub website:      Option<String>,
+    pub id: Option<i64>,
+    pub name: String,
+    pub city: Option<String>,
+    pub country: Option<String>,
+    pub club_type: Option<String>,
+    pub description: Option<String>,
+    pub website: Option<String>,
     pub founded_year: Option<i32>,
 }
 
@@ -103,13 +103,13 @@ pub(crate) struct ClubRow {
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct CompetitionRow {
-    pub id:             i64,
-    pub name:           String,
-    pub scope:          Option<String>,
-    pub country:        Option<String>,
-    pub city:           Option<String>,
-    pub website:        Option<String>,
-    pub founded_year:   Option<i32>,
+    pub id: i64,
+    pub name: String,
+    pub scope: Option<String>,
+    pub country: Option<String>,
+    pub city: Option<String>,
+    pub website: Option<String>,
+    pub founded_year: Option<i32>,
     pub owning_club_id: Option<i64>,
 }
 
@@ -120,76 +120,76 @@ pub(crate) struct CompetitionRow {
 /// `title_name` is set when querying from `archive.rs` (denormalised label).
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct TitleHolderRow {
-    pub competition_id:       Option<i64>,
-    pub title_name:           Option<String>,
-    pub holder_name:          String,
-    pub year:                 Option<i32>,
-    pub city:                 Option<String>,
-    pub country:              Option<String>,
+    pub competition_id: Option<i64>,
+    pub title_name: Option<String>,
+    pub holder_name: String,
+    pub year: Option<i32>,
+    pub city: Option<String>,
+    pub country: Option<String>,
     pub inclusion_flag_codes: Option<Vec<String>>,
-    pub holder_status:        Option<String>,
-    pub bio:                   Option<String>,
-    pub charity_name:         Option<String>,
-    pub charity_link:         Option<String>,
+    pub holder_status: Option<String>,
+    pub bio: Option<String>,
+    pub charity_name: Option<String>,
+    pub charity_link: Option<String>,
 }
 
 // ── Creators ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct CreatorRow {
-    pub id:             i64,
-    pub name:           String,
-    pub creator_type:   Option<String>,
-    pub city:           Option<String>,
-    pub country:        Option<String>,
-    pub bio:            Option<String>,
-    pub website:        Option<String>,
-    pub spotify_link:   Option<String>,
-    pub youtube_link:   Option<String>,
-    pub bandcamp_link:  Option<String>,
-    pub etsy_link:      Option<String>,
-    pub instagram:      Option<String>,
+    pub id: i64,
+    pub name: String,
+    pub creator_type: Option<String>,
+    pub city: Option<String>,
+    pub country: Option<String>,
+    pub bio: Option<String>,
+    pub website: Option<String>,
+    pub spotify_link: Option<String>,
+    pub youtube_link: Option<String>,
+    pub bandcamp_link: Option<String>,
+    pub etsy_link: Option<String>,
+    pub instagram: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct MediaRow {
-    pub title:          Option<String>,
-    pub creator_id:     Option<i64>,
-    pub media_type:     Option<String>,
-    pub year:           Option<i32>,
-    pub link:           Option<String>,
+    pub title: Option<String>,
+    pub creator_id: Option<i64>,
+    pub media_type: Option<String>,
+    pub year: Option<i32>,
+    pub link: Option<String>,
     pub streaming_link: Option<String>,
     pub affiliate_link: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct StoreRow {
-    pub name:           String,
+    pub name: String,
     #[serde(rename = "type")]
-    pub store_type:     Option<String>,
-    pub link:           Option<String>,
-    pub description:    Option<String>,
-    pub bear_owned:     Option<bool>,
+    pub store_type: Option<String>,
+    pub link: Option<String>,
+    pub description: Option<String>,
+    pub bear_owned: Option<bool>,
     pub size_inclusive: Option<bool>,
-    pub ships_global:   Option<bool>,
+    pub ships_global: Option<bool>,
     pub affiliate_link: Option<String>,
-    pub affiliate_pct:  Option<f64>,
+    pub affiliate_pct: Option<f64>,
 }
 
 // ── Digital Spaces ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct DigitalSpaceRow {
-    pub name:            String,
-    pub space_type:      Option<String>,
-    pub description:     Option<String>,
-    pub url:             Option<String>,
-    pub member_count:    Option<i64>,
-    pub instagram:       Option<String>,
-    pub tiktok_handle:   Option<String>,
-    pub bluesky_handle:  Option<String>,
-    pub youtube_handle:  Option<String>,
-    pub id:      Option<i64>,
+    pub name: String,
+    pub space_type: Option<String>,
+    pub description: Option<String>,
+    pub url: Option<String>,
+    pub member_count: Option<i64>,
+    pub instagram: Option<String>,
+    pub tiktok_handle: Option<String>,
+    pub bluesky_handle: Option<String>,
+    pub youtube_handle: Option<String>,
+    pub id: Option<i64>,
     pub country: Option<String>,
 }
 
@@ -197,40 +197,40 @@ pub(crate) struct DigitalSpaceRow {
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct BearHistoryRow {
-    pub year:         Option<i32>,
-    pub title:        String,
-    pub description:  Option<String>,
-    pub category:     Option<String>,
+    pub year: Option<i32>,
+    pub title: String,
+    pub description: Option<String>,
+    pub category: Option<String>,
     pub significance: Option<String>,
-    pub link:         Option<String>,
+    pub link: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct CommunityStoryRow {
-    pub title:      Option<String>,
+    pub title: Option<String>,
     pub story_type: Option<String>,
-    pub year:       Option<i32>,
-    pub excerpt:    Option<String>,
+    pub year: Option<i32>,
+    pub excerpt: Option<String>,
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct CandidateEventRow {
-    pub id:              Option<i64>,
-    pub raw_title:       Option<String>,
+    pub id: Option<i64>,
+    pub raw_title: Option<String>,
     pub raw_description: Option<String>,
-    pub raw_date:        Option<String>,
-    pub parsed_country:  Option<String>,
-    pub source_url:      Option<String>,
-    pub created_at:      Option<String>,
+    pub raw_date: Option<String>,
+    pub parsed_country: Option<String>,
+    pub source_url: Option<String>,
+    pub created_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct WatchedFeedRow {
-    pub id:           Option<i64>,
-    pub org_name:     Option<String>,
-    pub feed_type:    Option<String>,
+    pub id: Option<i64>,
+    pub org_name: Option<String>,
+    pub feed_type: Option<String>,
     pub last_fetched: Option<String>,
     pub fetch_errors: Option<i64>,
 }
@@ -239,12 +239,12 @@ pub(crate) struct WatchedFeedRow {
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct FutureIdeaRow {
-    pub id:          Option<i64>,
-    pub icon:        Option<String>,
-    pub title:       Option<String>,
+    pub id: Option<i64>,
+    pub icon: Option<String>,
+    pub title: Option<String>,
     pub description: Option<String>,
-    pub upvotes:     Option<i64>,
-    pub source:      Option<String>,
+    pub upvotes: Option<i64>,
+    pub source: Option<String>,
 }
 
 #[cfg(test)]
@@ -275,7 +275,7 @@ mod tests {
         let row: EventRow = serde_json::from_str(json).expect("EventRow failed to deserialize");
         assert_eq!(row.name, "Grizzly Run");
         assert_eq!(row.city.as_deref(), Some("Montreal"));
-        assert_eq!(row.event_type.as_deref(), Some("run"));  // renamed from "type"
+        assert_eq!(row.event_type.as_deref(), Some("run")); // renamed from "type"
         assert_eq!(row.hot, Some(true));
         let flags = row.inclusion_flag_codes.unwrap();
         assert_eq!(flags.len(), 2);
@@ -296,7 +296,8 @@ mod tests {
             "hot": false,
             "link": "https://bearweeksitges.com"
         }"#;
-        let row: EventRow = serde_json::from_str(json).expect("partial EventRow should deserialize");
+        let row: EventRow =
+            serde_json::from_str(json).expect("partial EventRow should deserialize");
         assert_eq!(row.name, "Bear Week Sitges");
         assert!(row.end_date.is_none());
         assert!(row.inclusion_flag_codes.is_none());
@@ -309,7 +310,10 @@ mod tests {
     fn event_row_rejects_missing_required_name() {
         let json = r#"{"city": "Berlin", "country": "Germany"}"#;
         let result: Result<EventRow, _> = serde_json::from_str(json);
-        assert!(result.is_err(), "EventRow with missing 'name' should fail, not silently default");
+        assert!(
+            result.is_err(),
+            "EventRow with missing 'name' should fail, not silently default"
+        );
     }
 
     #[test]
@@ -341,7 +345,8 @@ mod tests {
                 year: Some(2024),
                 holder_status: Some("holdover".into()),
                 display_status: None,
-                city: None, country: Some("UK".into()),
+                city: None,
+                country: Some("UK".into()),
                 competition_scope: Some("national".into()),
                 competition_name: Some("Mr Bear UK".into()),
             },
@@ -351,7 +356,8 @@ mod tests {
                 year: Some(2025),
                 holder_status: Some("current".into()),
                 display_status: None,
-                city: None, country: Some("UK".into()),
+                city: None,
+                country: Some("UK".into()),
                 competition_scope: Some("national".into()),
                 competition_name: Some("Mr Bear UK".into()),
             },
@@ -360,13 +366,18 @@ mod tests {
         // This is the dedup logic from zone_now
         let mut seen: HashMap<String, CurrentHolder> = HashMap::new();
         for t in raw {
-            let year     = t.year.unwrap_or(0);
+            let year = t.year.unwrap_or(0);
             let existing = seen.get(&t.title_name).and_then(|v| v.year).unwrap_or(0);
-            if year >= existing { seen.insert(t.title_name.clone(), t); }
+            if year >= existing {
+                seen.insert(t.title_name.clone(), t);
+            }
         }
 
         let result = seen.get("Mr Bear UK").expect("Mr Bear UK should be in map");
-        assert_eq!(result.holder_name, "Alex Turner", "dedup should keep 2025 holder, not 2024");
+        assert_eq!(
+            result.holder_name, "Alex Turner",
+            "dedup should keep 2025 holder, not 2024"
+        );
         assert_eq!(result.year, Some(2025));
     }
 
@@ -391,6 +402,9 @@ mod tests {
         // id is i64 (not Option<i64>) — missing id must fail
         let json = r#"{"name": "Mr Bear Germany", "scope": "national"}"#;
         let result: Result<CompetitionRow, _> = serde_json::from_str(json);
-        assert!(result.is_err(), "CompetitionRow with missing 'id' should fail");
+        assert!(
+            result.is_err(),
+            "CompetitionRow with missing 'id' should fail"
+        );
     }
 }

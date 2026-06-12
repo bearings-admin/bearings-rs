@@ -1,13 +1,13 @@
 //! Zone: clubs
 
-use axum::response::{Html, IntoResponse, Response};
+use super::super::query::*;
 use crate::db::LogErr;
 use crate::{db::SupabaseClient, i18n, ui::*};
+use axum::response::{Html, IntoResponse, Response};
 #[allow(unused_imports)]
 use chrono::{Months, Utc};
 #[allow(unused_imports)]
 use std::collections::HashMap;
-use super::super::query::*;
 
 pub(crate) async fn zone_clubs(db: SupabaseClient, lang: &str) -> Response {
     let url = format!(
@@ -46,7 +46,12 @@ pub(crate) async fn zone_clubs(db: SupabaseClient, lang: &str) -> Response {
     let body = format!(
         "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:16px\">{page_clubs_title}</h1>{items}"
     );
-    Html(shell("Clubs", "Bear clubs worldwide.", "archive", &body, lang)).into_response()
+    Html(shell(
+        "Clubs",
+        "Bear clubs worldwide.",
+        "archive",
+        &body,
+        lang,
+    ))
+    .into_response()
 }
-
-

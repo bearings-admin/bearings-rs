@@ -1,23 +1,31 @@
 //! Zone: coming_up
 
-use axum::response::{Html, IntoResponse, Response};
-use axum::http::StatusCode;
+use super::super::query::*;
 use crate::{db::SupabaseClient, ui::*};
+use axum::http::StatusCode;
+use axum::response::{Html, IntoResponse, Response};
 #[allow(unused_imports)]
 use chrono::{Months, Utc};
 #[allow(unused_imports)]
 use std::collections::HashMap;
-use super::super::query::*;
 
-pub(crate) async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>, event_country: Option<String>, month_filter: Option<u32>, lang: &str) -> Response {
+pub(crate) async fn zone_coming_up(
+    db: SupabaseClient,
+    months_ahead: Option<u32>,
+    event_country: Option<String>,
+    month_filter: Option<u32>,
+    lang: &str,
+) -> Response {
     let months = months_ahead.unwrap_or(6).clamp(1, 24);
     let country = event_country.as_deref().unwrap_or("");
 
     // Compute date window
-    let today    = Utc::now().date_naive();
-    let to_date  = today.checked_add_months(Months::new(months)).unwrap_or(today);
+    let today = Utc::now().date_naive();
+    let to_date = today
+        .checked_add_months(Months::new(months))
+        .unwrap_or(today);
     let from_str = today.format("%Y-%m-%d").to_string();
-    let to_str   = to_date.format("%Y-%m-%d").to_string();
+    let to_str = to_date.format("%Y-%m-%d").to_string();
 
     let country_val = if country.is_empty() {
         serde_json::Value::Null
@@ -37,14 +45,26 @@ pub(crate) async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>
         "max_rows":     60,
     });
     let data: serde_json::Value = match db.post_rpc("coming_up", &rpc_body).await {
-        Ok(v)  => v,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "coming_up rpc failed").into_response(),
+        Ok(v) => v,
+        Err(_) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "coming_up rpc failed").into_response()
+        }
     };
-    let events: Vec<EventRow> = data["events"].as_array()
-        .map(|arr| arr.iter().filter_map(|v| serde_json::from_value(v.clone()).ok()).collect())
+    let events: Vec<EventRow> = data["events"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| serde_json::from_value(v.clone()).ok())
+                .collect()
+        })
         .unwrap_or_default();
-    let venues: Vec<PlaceRow> = data["venues"].as_array()
-        .map(|arr| arr.iter().filter_map(|v| serde_json::from_value(v.clone()).ok()).collect())
+    let venues: Vec<PlaceRow> = data["venues"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| serde_json::from_value(v.clone()).ok())
+                .collect()
+        })
         .unwrap_or_default();
 
     // ── Selectors ─────────────────────────────────────────────
@@ -53,23 +73,56 @@ pub(crate) async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>
                      font-size:13px;color:{DARK};font-family:inherit";
 
     let months_opts: &[(u32, &str)] = &[
-        (1, "Next month"), (2, "Next 2 months"), (3, "Next 3 months"),
-        (6, "Next 6 months"), (12, "Next year"),
+        (1, "Next month"),
+        (2, "Next 2 months"),
+        (3, "Next 3 months"),
+        (6, "Next 6 months"),
+        (12, "Next year"),
     ];
-    let months_sel: String = months_opts.iter().map(|(v, l)| {
-        let sel = if *v == months { " selected" } else { "" };
-        format!("<option value=\"{v}\"{sel}>{l}</option>")
-    }).collect();
+    let months_sel: String = months_opts
+        .iter()
+        .map(|(v, l)| {
+            let sel = if *v == months { " selected" } else { "" };
+            format!("<option value=\"{v}\"{sel}>{l}</option>")
+        })
+        .collect();
 
     // Country groups
     let regions: &[(&str, &[&str])] = &[
-        ("North America",  &["Canada", "USA", "Mexico"]),
-        ("Europe",         &["Belgium","Czech Republic","France","Germany","Iceland",
-                              "Ireland","Italy","Luxembourg","Netherlands","Poland",
-                              "Portugal","Scotland","Spain","Sweden","Switzerland","UK"]),
-        ("Asia Pacific",   &["Australia","Japan","New Zealand","Thailand"]),
-        ("Latin America",  &["Brazil","Argentina","Chile","Colombia","Mexico"]),
-        ("Africa & Middle East", &["South Africa","Egypt","Morocco"]),
+        ("North America", &["Canada", "USA", "Mexico"]),
+        (
+            "Europe",
+            &[
+                "Belgium",
+                "Czech Republic",
+                "France",
+                "Germany",
+                "Iceland",
+                "Ireland",
+                "Italy",
+                "Luxembourg",
+                "Netherlands",
+                "Poland",
+                "Portugal",
+                "Scotland",
+                "Spain",
+                "Sweden",
+                "Switzerland",
+                "UK",
+            ],
+        ),
+        (
+            "Asia Pacific",
+            &["Australia", "Japan", "New Zealand", "Thailand"],
+        ),
+        (
+            "Latin America",
+            &["Brazil", "Argentina", "Chile", "Colombia", "Mexico"],
+        ),
+        (
+            "Africa & Middle East",
+            &["South Africa", "Egypt", "Morocco"],
+        ),
     ];
     let world_sel = if country.is_empty() { " selected" } else { "" };
     let mut country_opts = format!("<option value=\"\"{world_sel}>🌍 Worldwide</option>");
@@ -82,51 +135,74 @@ pub(crate) async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>
         country_opts.push_str("</optgroup>");
     }
 
-    let where_label = if country.is_empty() { "Worldwide".to_string() }
-                      else { esc(country) };
-    let month_label = months_opts.iter()
+    let where_label = if country.is_empty() {
+        "Worldwide".to_string()
+    } else {
+        esc(country)
+    };
+    let month_label = months_opts
+        .iter()
         .find(|(v, _)| *v == months)
         .map(|(_, l)| *l)
         .unwrap_or("6 months");
 
     // ── Monthly bar chart + optional month filter ───────────────
-    let country_enc = if country.is_empty() { String::new() } else {
+    let country_enc = if country.is_empty() {
+        String::new()
+    } else {
         format!("&event_country={}", urlencoding::encode(country))
     };
     let bar_base = format!("/?zone=coming-up&months_ahead={months}&lang={lang}{country_enc}");
     let bar = timeline_bar(
-        &events.iter().map(|e| e.start_date.clone()).collect::<Vec<_>>(),
-        month_filter, &bar_base, "#upcoming-results");
+        &events
+            .iter()
+            .map(|e| e.start_date.clone())
+            .collect::<Vec<_>>(),
+        month_filter,
+        &bar_base,
+        "#upcoming-results",
+    );
 
     // Filter displayed events by selected month
     let disp_events: Vec<EventRow> = if let Some(m) = month_filter {
-        events.iter().filter(|ev| {
-            ev.start_date.as_deref()
-                .and_then(|d| d.split('-').nth(1))
-                .and_then(|s| s.parse::<u32>().ok())
-                .map(|em| em == m)
-                .unwrap_or(false)
-        }).cloned().collect()
+        events
+            .iter()
+            .filter(|ev| {
+                ev.start_date
+                    .as_deref()
+                    .and_then(|d| d.split('-').nth(1))
+                    .and_then(|s| s.parse::<u32>().ok())
+                    .map(|em| em == m)
+                    .unwrap_or(false)
+            })
+            .cloned()
+            .collect()
     } else {
         events.clone()
     };
 
     // ── Event cards grouped by region ────────────────────────
     let make_cu_card = |ev: &EventRow| -> String {
-        let name  = esc(ev.name.as_str());
-        let city  = esc(ev.city.as_deref().unwrap_or(""));
-        let ctry  = esc(ev.country.as_deref().unwrap_or(""));
+        let name = esc(ev.name.as_str());
+        let city = esc(ev.city.as_deref().unwrap_or(""));
+        let ctry = esc(ev.country.as_deref().unwrap_or(""));
         let start = esc(ev.start_date.as_deref().unwrap_or(""));
-        let end   = esc(ev.end_date.as_deref().unwrap_or(""));
-        let link  = esc(ev.link.as_deref().unwrap_or(""));
+        let end = esc(ev.end_date.as_deref().unwrap_or(""));
+        let link = esc(ev.link.as_deref().unwrap_or(""));
         let etype = esc(ev.event_type.as_deref().unwrap_or(""));
-        let fs    = ev.inclusion_flag_codes.clone().unwrap_or_default();
+        let fs = ev.inclusion_flag_codes.clone().unwrap_or_default();
         let dates = if !end.is_empty() && end != start {
             format!("{start} → {end}")
-        } else { start.to_string() };
+        } else {
+            start.to_string()
+        };
         let link_html = if !link.is_empty() && link != "#" {
-            format!("<a href=\"{link}\" target=\"_blank\" rel=\"noopener\" class=\"btn-o\">Info</a>")
-        } else { String::new() };
+            format!(
+                "<a href=\"{link}\" target=\"_blank\" rel=\"noopener\" class=\"btn-o\">Info</a>"
+            )
+        } else {
+            String::new()
+        };
         card(&format!(
             "<div style=\"display:flex;justify-content:space-between;\
                          align-items:flex-start;gap:10px\">\
@@ -141,13 +217,27 @@ pub(crate) async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>
               </div>\
               {link_html}\
             </div>",
-            sep   = if !city.is_empty() && !ctry.is_empty() { ", " } else { "" },
+            sep = if !city.is_empty() && !ctry.is_empty() {
+                ", "
+            } else {
+                ""
+            },
             fhtml = flags(&fs),
         ))
     };
-    let worldwide = event_country.as_deref().map(|c| c.is_empty()).unwrap_or(true);
+    let worldwide = event_country
+        .as_deref()
+        .map(|c| c.is_empty())
+        .unwrap_or(true);
     let ev_cards: String = if worldwide {
-        let region_order = ["North America","Europe","Asia Pacific","Latin America","Africa & Middle East","Other"];
+        let region_order = [
+            "North America",
+            "Europe",
+            "Asia Pacific",
+            "Latin America",
+            "Africa & Middle East",
+            "Other",
+        ];
         region_order.iter().filter_map(|&region| {
             let group: Vec<_> = disp_events.iter()
                 .filter(|ev| country_region(ev.country.as_deref().unwrap_or("")) == region)
@@ -171,7 +261,9 @@ pub(crate) async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>
                 Try a longer time window or a different region.</div>\
             </div>"
         )
-    } else { String::new() };
+    } else {
+        String::new()
+    };
 
     // iCal subscribe block
     let ical_block = format!(
@@ -188,17 +280,22 @@ pub(crate) async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>
     );
 
     // Venues section (compact)
-    let vn_cards: String = venues.iter().take(3).map(|v| {
-        let name  = esc(v.name.as_str());
-        let ptype = esc(v.place_type.as_deref().unwrap_or(""));
-        let city  = esc(v.city.as_deref().unwrap_or(""));
-        let ctry  = esc(v.country.as_deref().unwrap_or(""));
-        let site  = esc(v.website.as_deref().unwrap_or(""));
-        let site_btn = if !site.is_empty() && site != "#" {
-            format!("<a href=\"{site}\" target=\"_blank\" class=\"btn-t\">Visit</a>")
-        } else { String::new() };
-        card(&format!(
-            "<div style=\"display:flex;justify-content:space-between;align-items:center\">\
+    let vn_cards: String = venues
+        .iter()
+        .take(3)
+        .map(|v| {
+            let name = esc(v.name.as_str());
+            let ptype = esc(v.place_type.as_deref().unwrap_or(""));
+            let city = esc(v.city.as_deref().unwrap_or(""));
+            let ctry = esc(v.country.as_deref().unwrap_or(""));
+            let site = esc(v.website.as_deref().unwrap_or(""));
+            let site_btn = if !site.is_empty() && site != "#" {
+                format!("<a href=\"{site}\" target=\"_blank\" class=\"btn-t\">Visit</a>")
+            } else {
+                String::new()
+            };
+            card(&format!(
+                "<div style=\"display:flex;justify-content:space-between;align-items:center\">\
               <div>\
                 <div style=\"font-weight:600;font-size:13px\">{name}\
                   <span style=\"font-weight:400;font-size:11px;color:{MID}\"> {ptype}</span></div>\
@@ -206,8 +303,9 @@ pub(crate) async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>
               </div>\
               {site_btn}\
             </div>"
-        ))
-    }).collect();
+            ))
+        })
+        .collect();
 
     let body = format!(
         "<div style=\"text-align:center;padding:20px 0 12px\">\
@@ -244,14 +342,24 @@ pub(crate) async fn zone_coming_up(db: SupabaseClient, months_ahead: Option<u32>
           {h_vn}\
           {vn_cards}\
         </div>",
-        h_ev  = sh(&format!("{month_label} · {where_label}"), Some(disp_events.len())),
-        h_vn  = if venues.is_empty() { String::new() } else {
+        h_ev = sh(
+            &format!("{month_label} · {where_label}"),
+            Some(disp_events.len())
+        ),
+        h_vn = if venues.is_empty() {
+            String::new()
+        } else {
             sh(&format!("Venues in {where_label}"), Some(venues.len()))
         },
     );
-    Html(shell("Upcoming Events", "Find bear events near you.", "coming-up", &body, lang)).into_response()
+    Html(shell(
+        "Upcoming Events",
+        "Find bear events near you.",
+        "coming-up",
+        &body,
+        lang,
+    ))
+    .into_response()
 }
 
 // ── ZONE: BEAR ARCHIVES (decade tabs) ────────────────────────
-
-

@@ -1,4 +1,3 @@
-
 //! Treasury monitoring — read-only Cardano wallet surveillance.
 //! This module NEVER holds private keys.
 //! It reads from Blockfrost and writes to Supabase.
@@ -7,13 +6,9 @@
 //! ADA was NET RECEIVED by our wallet (outputs to us minus inputs from us).
 //! This correctly handles change outputs and complex transactions.
 
-use crate::{
-    blockfrost::BlockfrostClient,
-    error::AgentError,
-    supabase::SupabaseWriter,
-};
-use bearings_shared::models::OperationalLedger;
 use crate::AgentConfig;
+use crate::{blockfrost::BlockfrostClient, error::AgentError, supabase::SupabaseWriter};
+use bearings_shared::models::OperationalLedger;
 use chrono::{TimeZone, Utc};
 
 /// Check both wallets for new inbound transactions.
@@ -50,7 +45,8 @@ pub async fn check_inbound(
                 continue; // This was an outgoing transaction
             }
 
-            let tx_time = Utc.timestamp_opt(tx.block_time, 0)
+            let tx_time = Utc
+                .timestamp_opt(tx.block_time, 0)
                 .single()
                 .unwrap_or_else(|| Utc::now()); // closure required — Utc::now is fn, not value
 
@@ -62,10 +58,7 @@ pub async fn check_inbound(
                 amount_usd: None,
                 vendor: Some("Community donation".to_string()),
                 category: Some(format!("{}_inflow", wallet_name)),
-                description: Some(format!(
-                    "Inbound {} ADA to {} wallet",
-                    net_ada, wallet_name
-                )),
+                description: Some(format!("Inbound {} ADA to {} wallet", net_ada, wallet_name)),
                 tx_hash: Some(tx.tx_hash.clone()),
                 authorized_by: Some("cardano_network".to_string()),
                 ..Default::default()
@@ -76,7 +69,9 @@ pub async fn check_inbound(
 
             tracing::info!(
                 "Logged inbound transaction: {} ADA to {} ({})",
-                net_ada, wallet_name, &tx.tx_hash[..8]
+                net_ada,
+                wallet_name,
+                &tx.tx_hash[..8]
             );
         }
     }
@@ -92,14 +87,19 @@ pub async fn update_balances(
     config: &AgentConfig,
 ) -> Result<(), AgentError> {
     let treasury_ada = cardano.wallet_balance_ada(&config.treasury_wallet).await?;
-    let operational_ada = cardano.wallet_balance_ada(&config.operational_wallet).await?;
+    let operational_ada = cardano
+        .wallet_balance_ada(&config.operational_wallet)
+        .await?;
 
-    db.update_platform_setting("treasury_balance_ada", &treasury_ada.to_string()).await?;
-    db.update_platform_setting("operational_balance_ada", &operational_ada.to_string()).await?;
+    db.update_platform_setting("treasury_balance_ada", &treasury_ada.to_string())
+        .await?;
+    db.update_platform_setting("operational_balance_ada", &operational_ada.to_string())
+        .await?;
 
     tracing::info!(
         "Balances updated — treasury: {:.6} ADA, operational: {:.6} ADA",
-        treasury_ada, operational_ada
+        treasury_ada,
+        operational_ada
     );
 
     Ok(())

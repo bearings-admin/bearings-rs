@@ -18,7 +18,13 @@ pub enum VoteOutcome {
     /// This holder already voted on this proposal.
     Duplicate { yes: i32, no: i32 },
     /// Vote recorded; `passed` is true if it crossed the threshold.
-    Recorded { passed: bool, yes: i32, no: i32, total: i32, min_votes: i32 },
+    Recorded {
+        passed: bool,
+        yes: i32,
+        no: i32,
+        total: i32,
+        min_votes: i32,
+    },
 }
 
 const VALID_VOTES: [&str; 3] = ["yes", "no", "abstain"];
@@ -34,7 +40,12 @@ impl<R: VoteRepository> VoteService<R> {
         Self { repo }
     }
 
-    pub async fn cast(&self, proposal_id: i64, voter_id: i64, vote: &str) -> Result<VoteOutcome, AppError> {
+    pub async fn cast(
+        &self,
+        proposal_id: i64,
+        voter_id: i64,
+        vote: &str,
+    ) -> Result<VoteOutcome, AppError> {
         if !VALID_VOTES.contains(&vote) {
             return Ok(VoteOutcome::InvalidVote);
         }
@@ -52,46 +63,62 @@ impl<R: VoteRepository> VoteService<R> {
         if proposal.status.as_deref() != Some("open") {
             return Ok(VoteOutcome::ProposalClosed {
                 status: proposal.status.clone().unwrap_or_default(),
-                yes:    proposal.vote_yes.unwrap_or(0),
-                no:     proposal.vote_no.unwrap_or(0),
+                yes: proposal.vote_yes.unwrap_or(0),
+                no: proposal.vote_no.unwrap_or(0),
             });
         }
 
-        if !self.repo.record_vote(proposal_id, voter_id, vote, weight).await? {
+        if !self
+            .repo
+            .record_vote(proposal_id, voter_id, vote, weight)
+            .await?
+        {
             return Ok(VoteOutcome::Duplicate {
                 yes: proposal.vote_yes.unwrap_or(0),
-                no:  proposal.vote_no.unwrap_or(0),
+                no: proposal.vote_no.unwrap_or(0),
             });
         }
 
         // Re-fetch DB-authoritative counts. The `update_proposal_votes` trigger on
         // proposal_votes INSERT maintains them atomically; never read-modify-write here.
-        let fresh = self.repo.find_proposal(proposal_id).await?.unwrap_or(proposal);
+        let fresh = self
+            .repo
+            .find_proposal(proposal_id)
+            .await?
+            .unwrap_or(proposal);
         let yes = fresh.vote_yes.unwrap_or(0);
-        let no  = fresh.vote_no.unwrap_or(0);
+        let no = fresh.vote_no.unwrap_or(0);
         let threshold_pct = fresh.vote_threshold_pct.unwrap_or(60);
-        let min_votes     = fresh.vote_min_count.unwrap_or(10);
+        let min_votes = fresh.vote_min_count.unwrap_or(10);
         let total = yes + no;
         let passed = total >= min_votes && (yes * 100 / total.max(1)) >= threshold_pct;
 
-        self.repo.update_proposal_status(proposal_id, if passed { "passed" } else { "open" }).await?;
+        self.repo
+            .update_proposal_status(proposal_id, if passed { "passed" } else { "open" })
+            .await?;
 
-        Ok(VoteOutcome::Recorded { passed, yes, no, total, min_votes })
+        Ok(VoteOutcome::Recorded {
+            passed,
+            yes,
+            no,
+            total,
+            min_votes,
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::repositories::vote_repo::{ProposalVoteState, Voter, VoteRepository};
+    use crate::repositories::vote_repo::{ProposalVoteState, VoteRepository, Voter};
     use async_trait::async_trait;
 
     /// A configurable in-memory repository — lets us test the governance logic
     /// without a database. This is the payoff of depending on the trait.
     #[derive(Default)]
     struct FakeVoteRepo {
-        voter:     Option<Voter>,
-        proposal:  Option<ProposalVoteState>,
+        voter: Option<Voter>,
+        proposal: Option<ProposalVoteState>,
         record_ok: bool,
     }
 
@@ -112,26 +139,42 @@ mod tests {
     }
 
     fn voter(balance: i32) -> Voter {
-        Voter { id: 1, token_balance: Some(balance), verified: Some(true) }
+        Voter {
+            id: 1,
+            token_balance: Some(balance),
+            verified: Some(true),
+        }
     }
     fn proposal(status: &str, yes: i32, no: i32) -> ProposalVoteState {
         ProposalVoteState {
-            id: 1, status: Some(status.into()),
-            vote_yes: Some(yes), vote_no: Some(no),
-            vote_threshold_pct: Some(60), vote_min_count: Some(10),
+            id: 1,
+            status: Some(status.into()),
+            vote_yes: Some(yes),
+            vote_no: Some(no),
+            vote_threshold_pct: Some(60),
+            vote_min_count: Some(10),
         }
     }
 
     #[tokio::test]
     async fn rejects_invalid_vote_value() {
         let svc = VoteService::new(FakeVoteRepo::default());
-        assert_eq!(svc.cast(1, 1, "maybe").await.unwrap(), VoteOutcome::InvalidVote);
+        assert_eq!(
+            svc.cast(1, 1, "maybe").await.unwrap(),
+            VoteOutcome::InvalidVote
+        );
     }
 
     #[tokio::test]
     async fn rejects_unknown_voter() {
-        let svc = VoteService::new(FakeVoteRepo { voter: None, ..Default::default() });
-        assert_eq!(svc.cast(1, 1, "yes").await.unwrap(), VoteOutcome::VoterNotFound);
+        let svc = VoteService::new(FakeVoteRepo {
+            voter: None,
+            ..Default::default()
+        });
+        assert_eq!(
+            svc.cast(1, 1, "yes").await.unwrap(),
+            VoteOutcome::VoterNotFound
+        );
     }
 
     #[tokio::test]
@@ -154,7 +197,10 @@ mod tests {
             proposal: Some(proposal("open", 1, 0)),
             record_ok: false, // insert rejected -> duplicate
         });
-        assert!(matches!(svc.cast(1, 1, "yes").await.unwrap(), VoteOutcome::Duplicate { .. }));
+        assert!(matches!(
+            svc.cast(1, 1, "yes").await.unwrap(),
+            VoteOutcome::Duplicate { .. }
+        ));
     }
 
     #[tokio::test]
@@ -178,7 +224,10 @@ mod tests {
             record_ok: true,
         });
         match svc.cast(1, 1, "yes").await.unwrap() {
-            VoteOutcome::Recorded { passed, total, .. } => { assert!(passed); assert_eq!(total, 10); }
+            VoteOutcome::Recorded { passed, total, .. } => {
+                assert!(passed);
+                assert_eq!(total, 10);
+            }
             other => panic!("expected Recorded, got {other:?}"),
         }
     }

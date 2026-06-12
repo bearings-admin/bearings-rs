@@ -1,4 +1,3 @@
-
 //! NORTH token governance.
 //!
 //! The NORTH token is a Cardano native asset. More NORTH = more sway
@@ -29,7 +28,7 @@ pub struct MintRequest {
     pub contributor_id: i64,
     pub display_name: String,
     pub claimed_role: String,
-    pub evidence_url: Option<String>,   // Link to public record (BWM article, competition page)
+    pub evidence_url: Option<String>, // Link to public record (BWM article, competition page)
     pub wallet_address: Option<String>, // Custodial wallet created by onboarding flow
     pub requested_at: chrono::DateTime<chrono::Utc>,
 }
@@ -39,7 +38,7 @@ pub struct MintRequest {
 pub struct MintResult {
     pub contributor_id: i64,
     pub north_balance: i32,
-    pub tx_hash: Option<String>,        // Cardano tx hash — set after manual mint
+    pub tx_hash: Option<String>, // Cardano tx hash — set after manual mint
     pub phase: u8,
 }
 
@@ -92,7 +91,7 @@ pub async fn confirm_mint(
     tracing::info!(
         "NORTH token minted — contributor {} — tx: {}",
         contributor_id,
-        tx_hash.get(..12).unwrap_or(tx_hash)  // safe: no panic on short hashes
+        tx_hash.get(..12).unwrap_or(tx_hash) // safe: no panic on short hashes
     );
 
     Ok(MintResult {
@@ -124,8 +123,9 @@ pub async fn check_dao_threshold(db: &SupabaseWriter) -> Result<bool, AgentError
 
     tracing::debug!(
         "NORTH holders: {}/{} — {} remaining until full governance",
-        verified_count, threshold,
-        threshold.saturating_sub(verified_count)  // safe: no panic if somehow over threshold
+        verified_count,
+        threshold,
+        threshold.saturating_sub(verified_count) // safe: no panic if somehow over threshold
     );
 
     Ok(false)

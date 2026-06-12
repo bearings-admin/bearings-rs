@@ -2,26 +2,26 @@
 //! Campaigns with a verified one-click donate link surface first ("Give now");
 //! event/ticket-based or info-only campaigns rank below ("ongoing giving").
 
-use axum::response::{Html, IntoResponse, Response};
-use crate::db::{SupabaseClient, LogErr};
-use crate::ui::*;
 use super::super::query::*;
+use crate::db::{LogErr, SupabaseClient};
+use crate::ui::*;
+use axum::response::{Html, IntoResponse, Response};
 
 fn cause_color(cause: &str) -> &'static str {
     match cause {
-        "Refugees & Safety"        => "#8c2020",
-        "HIV/AIDS"                 => "#b5179e",
-        "Elders & Seniors"         => "#2c5aa0",
-        "Disability & Inclusion"   => "#4a6741",
+        "Refugees & Safety" => "#8c2020",
+        "HIV/AIDS" => "#b5179e",
+        "Elders & Seniors" => "#2c5aa0",
+        "Disability & Inclusion" => "#4a6741",
         "Visibility & Safe Spaces" => ORANGE,
-        "Community Funds"          => BROWN,
-        _                          => MID,
+        "Community Funds" => BROWN,
+        _ => MID,
     }
 }
 
 fn campaign_card(c: &CampaignRow) -> String {
     let name = esc(c.name.as_str());
-    let org  = esc(c.org.as_deref().unwrap_or(""));
+    let org = esc(c.org.as_deref().unwrap_or(""));
     let desc = esc(c.description.as_deref().unwrap_or(""));
     let curr = esc(c.currency.as_deref().unwrap_or("USD"));
     let cause = c.cause.as_deref().unwrap_or("");
@@ -54,8 +54,13 @@ fn campaign_card(c: &CampaignRow) -> String {
         },
     };
 
-    let desc_h = if desc.is_empty() { String::new() } else {
-        format!("<div style=\"font-size:12px;color:{MID};margin-top:6px;line-height:1.5\">{}</div>", desc.chars().take(170).collect::<String>())
+    let desc_h = if desc.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<div style=\"font-size:12px;color:{MID};margin-top:6px;line-height:1.5\">{}</div>",
+            desc.chars().take(170).collect::<String>()
+        )
     };
 
     card(&format!("<div><div style=\"margin-bottom:6px\">{badges}</div><div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:12px\"><div style=\"flex:1;min-width:0\"><div style=\"font-weight:600;font-size:14px;line-height:1.3\">{name}</div><div style=\"font-size:11px;color:{MID};margin-top:2px\">{org}</div>{desc_h}</div><div style=\"flex-shrink:0\">{action}</div></div>{progress}</div>"))
@@ -63,17 +68,25 @@ fn campaign_card(c: &CampaignRow) -> String {
 
 pub(crate) async fn zone_campaigns(db: SupabaseClient, lang: &str) -> Response {
     let url = format!("{}/rest/v1/campaigns?active=eq.true&privacy_mode=eq.false&select=name,org,description,link,goal,raised,currency,urgent,cause,donate_url,usdc_accepted&order=urgent.desc,raised.desc.nullslast", db.url);
-    let campaigns: Vec<CampaignRow> = db.get_json::<Vec<CampaignRow>>(&url).await.or_log("campaigns");
+    let campaigns: Vec<CampaignRow> = db
+        .get_json::<Vec<CampaignRow>>(&url)
+        .await
+        .or_log("campaigns");
 
-    let (give, ongoing): (Vec<&CampaignRow>, Vec<&CampaignRow>) =
-        campaigns.iter().partition(|c| c.donate_url.as_deref().is_some_and(|u| !u.is_empty()));
+    let (give, ongoing): (Vec<&CampaignRow>, Vec<&CampaignRow>) = campaigns
+        .iter()
+        .partition(|c| c.donate_url.as_deref().is_some_and(|u| !u.is_empty()));
 
-    let render = |list: &[&CampaignRow]| -> String { list.iter().map(|&c| campaign_card(c)).collect() };
+    let render =
+        |list: &[&CampaignRow]| -> String { list.iter().map(|&c| campaign_card(c)).collect() };
 
     let mut body = format!("<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Bears Taking Action</h1><p style=\"font-size:12px;color:{MID};margin-bottom:16px\">Community campaigns, grouped by cause. The bear community has quietly moved millions to HIV/AIDS care, refugee safety, elders and more \u{2014} mostly through events that give 100% of proceeds.</p>");
 
     if !give.is_empty() {
-        body.push_str(&sh("Give now \u{2014} help close these targets", Some(give.len())));
+        body.push_str(&sh(
+            "Give now \u{2014} help close these targets",
+            Some(give.len()),
+        ));
         body.push_str(&render(&give));
     }
     if !ongoing.is_empty() {
@@ -82,5 +95,12 @@ pub(crate) async fn zone_campaigns(db: SupabaseClient, lang: &str) -> Response {
         body.push_str(&render(&ongoing));
     }
 
-    Html(shell("Campaigns", "Bear community campaigns by cause \u{2014} give now where you can.", "now", &body, lang)).into_response()
+    Html(shell(
+        "Campaigns",
+        "Bear community campaigns by cause \u{2014} give now where you can.",
+        "now",
+        &body,
+        lang,
+    ))
+    .into_response()
 }

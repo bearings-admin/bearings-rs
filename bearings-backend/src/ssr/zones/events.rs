@@ -1,13 +1,13 @@
 //! Zone: events
 
-use axum::response::{Html, IntoResponse, Response};
+use super::super::query::*;
 use crate::db::LogErr;
 use crate::{db::SupabaseClient, ui::*};
+use axum::response::{Html, IntoResponse, Response};
 #[allow(unused_imports)]
 use chrono::{Months, Utc};
 #[allow(unused_imports)]
 use std::collections::HashMap;
-use super::super::query::*;
 
 pub(crate) async fn zone_events(db: SupabaseClient, month: Option<u32>, lang: &str) -> Response {
     let url = format!(
@@ -51,7 +51,12 @@ pub(crate) async fn zone_events(db: SupabaseClient, month: Option<u32>, lang: &s
           <a href=\"/api/events/ical.ics\" class=\"btn-g\">📅 Subscribe</a>\
         </div>{items}"
     );
-    Html(shell("Events", "Bear events worldwide.", "now", &body, lang)).into_response()
+    Html(shell(
+        "Events",
+        "Bear events worldwide.",
+        "now",
+        &body,
+        lang,
+    ))
+    .into_response()
 }
-
-

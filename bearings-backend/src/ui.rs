@@ -10,14 +10,13 @@
 use crate::i18n;
 
 // ── Colour palette (Variant G) ────────────────────────────────────────────
-pub(crate) const BROWN:     &str = "#5C4033";
-pub(crate) const ORANGE:    &str = "#D2691E";
-pub(crate) const GOLD:      &str = "#D4A017";
-pub(crate) const TAN:       &str = "#C8B89A";
+pub(crate) const BROWN: &str = "#5C4033";
+pub(crate) const ORANGE: &str = "#D2691E";
+pub(crate) const GOLD: &str = "#D4A017";
+pub(crate) const TAN: &str = "#C8B89A";
 pub(crate) const OFF_WHITE: &str = "#F9F5F0";
-pub(crate) const DARK:      &str = "#1A1A1A";
-pub(crate) const MID:       &str = "#777777";
-
+pub(crate) const DARK: &str = "#1A1A1A";
+pub(crate) const MID: &str = "#777777";
 
 /// HTML-escape a value for safe interpolation into element text or a
 /// double-quoted attribute. Escapes `& < > " '` so untrusted DB, submission, or
@@ -26,40 +25,49 @@ pub(crate) fn esc(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
-            '&'  => out.push_str("&amp;"),
-            '<'  => out.push_str("&lt;"),
-            '>'  => out.push_str("&gt;"),
-            '"'  => out.push_str("&quot;"),
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
             '\'' => out.push_str("&#x27;"),
-            _    => out.push(c),
+            _ => out.push(c),
         }
     }
     out
 }
 
-pub(crate) fn shell(title: &str, description: &str, active: &str, body: &str, lang: &str) -> String {
+pub(crate) fn shell(
+    title: &str,
+    description: &str,
+    active: &str,
+    body: &str,
+    lang: &str,
+) -> String {
     let i18n = i18n::translations();
     let tl = |key: &str| i18n::t(i18n, lang, key);
 
     // Language switcher
-    let lang_switcher: String = [("en","EN"),("es","ES"),("fr","FR"),("ja","JA")].iter().map(|(code, label)| {
-        let active_style = if *code == lang {
-            format!("background:{BROWN};color:#fff")
-        } else {
-            format!("background:transparent;color:{MID}")
-        };
-        format!(
-            "<a href=\"/?zone={active}&lang={code}\" \
+    let lang_switcher: String = [("en", "EN"), ("es", "ES"), ("fr", "FR"), ("ja", "JA")]
+        .iter()
+        .map(|(code, label)| {
+            let active_style = if *code == lang {
+                format!("background:{BROWN};color:#fff")
+            } else {
+                format!("background:transparent;color:{MID}")
+            };
+            format!(
+                "<a href=\"/?zone={active}&lang={code}\" \
                style=\"font-size:10px;font-weight:700;padding:3px 7px;\
                        border-radius:999px;text-decoration:none;{active_style}\">{label}</a>"
-        )
-    }).collect();
+            )
+        })
+        .collect();
 
     // Bottom nav — 4 temporal zones, inline SVG icons
     let tnav_svg = |zone: &str, label: &str, svg: &str| {
-        let on  = zone == active;
+        let on = zone == active;
         let col = if on { ORANGE } else { BROWN };
-        let fw  = if on { "700" } else { "400" };
+        let fw = if on { "700" } else { "400" };
         format!(
             "<a href=\"/?zone={zone}&lang={lang}\" \
                style=\"display:flex;flex-direction:column;align-items:center;\
@@ -74,29 +82,32 @@ pub(crate) fn shell(title: &str, description: &str, active: &str, body: &str, la
 
     // Directory menu items (hamburger)
     let dir_items: &[(&str, &str, &str)] = &[
-        ("places",        "🍺", "nav.places"),
-        ("clubs",         "🏳\u{fe0f}", "nav.clubs"),
-        ("creators",      "🎨", "nav.creators"),
-        ("shops",         "\u{1f6cd}\u{fe0f}", "nav.shops"),
-        ("titles",        "🏆", "nav.titles"),
-        ("campaigns",     "💚", "nav.campaigns"),
-        ("digital-spaces","📱", "nav.digital"),
+        ("places", "🍺", "nav.places"),
+        ("clubs", "🏳\u{fe0f}", "nav.clubs"),
+        ("creators", "🎨", "nav.creators"),
+        ("shops", "\u{1f6cd}\u{fe0f}", "nav.shops"),
+        ("titles", "🏆", "nav.titles"),
+        ("campaigns", "💚", "nav.campaigns"),
+        ("digital-spaces", "📱", "nav.digital"),
     ];
-    let dir_links: String = dir_items.iter().map(|(zone, icon, key)| {
-        let on = zone == &active;
-        format!(
-            "<a href=\"/?zone={zone}&lang={lang}\" \
+    let dir_links: String = dir_items
+        .iter()
+        .map(|(zone, icon, key)| {
+            let on = zone == &active;
+            format!(
+                "<a href=\"/?zone={zone}&lang={lang}\" \
                style=\"display:flex;align-items:center;gap:10px;\
                        padding:10px 0;border-bottom:1px solid {TAN};\
                        text-decoration:none;color:{col};font-weight:{fw}\">\
               <span style=\"font-size:18px\">{icon}</span>\
               <span style=\"font-size:14px\">{label}</span>\
             </a>",
-            col   = if on { ORANGE } else { DARK },
-            fw    = if on { "700" } else { "400" },
-            label = tl(key),
-        )
-    }).collect();
+                col = if on { ORANGE } else { DARK },
+                fw = if on { "700" } else { "400" },
+                label = tl(key),
+            )
+        })
+        .collect();
 
     let _ = tl;
     format!(
@@ -186,8 +197,9 @@ padding:5px 8px 10px\">\n\
 /// instead of being re-sent inline in every page. Built once via OnceLock.
 pub(crate) fn stylesheet() -> &'static str {
     static CSS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    CSS.get_or_init(|| format!(
-        "    *{{box-sizing:border-box;margin:0;padding:0}}\n\
+    CSS.get_or_init(|| {
+        format!(
+            "    *{{box-sizing:border-box;margin:0;padding:0}}\n\
     html,body{{background:{OFF_WHITE};color:{DARK};font-family:Inter,sans-serif;font-size:15px}}\n\
     a{{color:inherit;text-decoration:none}}\n\
     .stripe{{height:5px;background:linear-gradient(to right,\n\
@@ -248,7 +260,8 @@ pub(crate) fn stylesheet() -> &'static str {
                         color:{MID};cursor:pointer;margin-bottom:16px;\n\
                         text-decoration:none}}\n\
 "
-    ))
+        )
+    })
 }
 
 pub(crate) fn card(c: &str) -> String {
@@ -273,7 +286,10 @@ pub(crate) fn split(content: &str, aside: &str) -> String {
 /// A static pill (the `.badge` CSS class). `label` is escaped; `bg`/`fg` are trusted
 /// colour constants from this module.
 pub(crate) fn badge(label: &str, bg: &str, fg: &str) -> String {
-    format!("<span class=\"badge\" style=\"background:{bg};color:{fg}\">{}</span>", esc(label))
+    format!(
+        "<span class=\"badge\" style=\"background:{bg};color:{fg}\">{}</span>",
+        esc(label)
+    )
 }
 
 /// A clickable pill that always opens safely in a new tab. `href` must already be
@@ -288,52 +304,65 @@ pub(crate) fn link_badge(href: &str, label: &str, bg: &str) -> String {
 
 pub(crate) fn country_region(country: &str) -> &'static str {
     match country {
-        "Canada"|"USA"|"Mexico"|"Puerto Rico" => "North America",
-        "Belgium"|"Czech Republic"|"Czechia"|"Estonia"|"France"|"Germany"|
-        "Iceland"|"Ireland"|"Italy"|"Luxembourg"|"Netherlands"|"Norway"|
-        "Poland"|"Portugal"|"Scotland"|"Spain"|"Sweden"|"Switzerland"|"UK" => "Europe",
-        "Australia"|"Japan"|"Malaysia"|"New Zealand"|"Philippines"|
-        "Singapore"|"South Korea"|"Taiwan"|"Thailand" => "Asia Pacific",
-        "Argentina"|"Brazil"|"Chile"|"Colombia"|"Uruguay" => "Latin America",
-        "Egypt"|"Israel"|"Morocco"|"South Africa"|"UAE" => "Africa & Middle East",
+        "Canada" | "USA" | "Mexico" | "Puerto Rico" => "North America",
+        "Belgium" | "Czech Republic" | "Czechia" | "Estonia" | "France" | "Germany" | "Iceland"
+        | "Ireland" | "Italy" | "Luxembourg" | "Netherlands" | "Norway" | "Poland" | "Portugal"
+        | "Scotland" | "Spain" | "Sweden" | "Switzerland" | "UK" => "Europe",
+        "Australia" | "Japan" | "Malaysia" | "New Zealand" | "Philippines" | "Singapore"
+        | "South Korea" | "Taiwan" | "Thailand" => "Asia Pacific",
+        "Argentina" | "Brazil" | "Chile" | "Colombia" | "Uruguay" => "Latin America",
+        "Egypt" | "Israel" | "Morocco" | "South Africa" | "UAE" => "Africa & Middle East",
         _ => "Other",
     }
 }
 
-
 pub(crate) fn sh(label: &str, n: Option<usize>) -> String {
-    let pill = n.map(|x| format!("<span class=\"cp\">{x}</span>")).unwrap_or_default();
+    let pill = n
+        .map(|x| format!("<span class=\"cp\">{x}</span>"))
+        .unwrap_or_default();
     format!("<div class=\"sh\">{label}{pill}</div>")
 }
 
 pub(crate) fn flags(codes: &[String]) -> String {
-    codes.iter().map(|c| {
-        let (lbl, bg, fg) = match c.as_str() {
-            "men_only"          => ("♂ men only",       "#EDE0D4", BROWN),
-            "clothing_optional" => ("🌿 clothing opt.", "#F0EAD6", "#5a6f2b"),
-            "members_only"      => ("🔒 members",       "#EDE0D4", BROWN),
-            "adults_only"       => ("18+",              "#FCEBD5", ORANGE),
-            "bear_focused"      => ("🐻 bear focused",  "#FBF0E0", ORANGE),
-            _                   => (c.as_str(),          "#EEE",   "#555"),
-        };
-        format!("<span class=\"badge\" style=\"background:{bg};color:{fg}\">{lbl}</span>", lbl = esc(lbl))
-    }).collect()
+    codes
+        .iter()
+        .map(|c| {
+            let (lbl, bg, fg) = match c.as_str() {
+                "men_only" => ("♂ men only", "#EDE0D4", BROWN),
+                "clothing_optional" => ("🌿 clothing opt.", "#F0EAD6", "#5a6f2b"),
+                "members_only" => ("🔒 members", "#EDE0D4", BROWN),
+                "adults_only" => ("18+", "#FCEBD5", ORANGE),
+                "bear_focused" => ("🐻 bear focused", "#FBF0E0", ORANGE),
+                _ => (c.as_str(), "#EEE", "#555"),
+            };
+            format!(
+                "<span class=\"badge\" style=\"background:{bg};color:{fg}\">{lbl}</span>",
+                lbl = esc(lbl)
+            )
+        })
+        .collect()
 }
 
-
-
-
-pub(crate) fn timeline_bar(start_dates: &[Option<String>], active_month: Option<u32>, href_base: &str, hx_target: &str) -> String {
-    let months = ["Jan","Feb","Mar","Apr","May","Jun",
-                  "Jul","Aug","Sep","Oct","Nov","Dec"];
-    let bear_col = [DARK,MID,BROWN,BROWN,ORANGE,ORANGE,
-                    GOLD,GOLD,TAN,TAN,"#AAAAAA",DARK];
+pub(crate) fn timeline_bar(
+    start_dates: &[Option<String>],
+    active_month: Option<u32>,
+    href_base: &str,
+    hx_target: &str,
+) -> String {
+    let months = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let bear_col = [
+        DARK, MID, BROWN, BROWN, ORANGE, ORANGE, GOLD, GOLD, TAN, TAN, "#AAAAAA", DARK,
+    ];
     let mut counts = [0usize; 12];
     for d_opt in start_dates {
         if let Some(d) = d_opt.as_deref() {
             let parts: Vec<&str> = d.splitn(3, '-').collect();
             if let Some(m) = parts.get(1).and_then(|s| s.parse::<usize>().ok()) {
-                if (1..=12).contains(&m) { counts[m-1] += 1; }
+                if (1..=12).contains(&m) {
+                    counts[m - 1] += 1;
+                }
             }
         }
     }
@@ -373,7 +402,9 @@ pub(crate) fn timeline_bar(start_dates: &[Option<String>], active_month: Option<
             "<a href=\"{href_base}\" style=\"font-size:10px;color:{ORANGE};text-decoration:none;\
               display:block;text-align:right;margin-top:4px\">✕ clear filter</a>"
         )
-    } else { String::new() };
+    } else {
+        String::new()
+    };
     format!(
         "<div class=\"card\" style=\"padding:12px 14px\">\
           <div style=\"font-size:10px;font-weight:600;color:{MID};margin-bottom:8px;\
@@ -389,7 +420,6 @@ pub(crate) fn extract_month(date_str: &str) -> Option<u32> {
     let parts: Vec<&str> = date_str.splitn(3, '-').collect();
     parts.get(1).and_then(|s| s.parse::<u32>().ok())
 }
-
 
 // ── ROOT DISPATCHER ───────────────────────────────────────────
 
@@ -408,7 +438,10 @@ mod tests {
     #[test]
     fn esc_escapes_attribute_breakout() {
         // A value injected into href="..." must not be able to close the attribute.
-        assert_eq!(esc("a\" onerror=\"alert(1)"), "a&quot; onerror=&quot;alert(1)");
+        assert_eq!(
+            esc("a\" onerror=\"alert(1)"),
+            "a&quot; onerror=&quot;alert(1)"
+        );
     }
 
     #[test]

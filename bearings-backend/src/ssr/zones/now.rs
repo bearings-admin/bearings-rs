@@ -1,17 +1,19 @@
 //! Zone: now
 
-use axum::response::{Html, IntoResponse, Response};
+use super::super::query::*;
 use crate::db::LogErr;
 use crate::{db::SupabaseClient, ui::*};
+use axum::response::{Html, IntoResponse, Response};
 use chrono::Utc;
-use super::super::query::*;
 
 pub(crate) async fn zone_now(db: SupabaseClient, lang: &str) -> Response {
     // Worldwide events starting within the next 30 days
-    let today   = Utc::now().date_naive();
-    let in_30   = today.checked_add_days(chrono::Days::new(30)).unwrap_or(today);
-    let from_s  = today.format("%Y-%m-%d").to_string();
-    let to_s    = in_30.format("%Y-%m-%d").to_string();
+    let today = Utc::now().date_naive();
+    let in_30 = today
+        .checked_add_days(chrono::Days::new(30))
+        .unwrap_or(today);
+    let from_s = today.format("%Y-%m-%d").to_string();
+    let to_s = in_30.format("%Y-%m-%d").to_string();
 
     let events_url = format!(
         "{}/rest/v1/events\
@@ -44,42 +46,59 @@ pub(crate) async fn zone_now(db: SupabaseClient, lang: &str) -> Response {
     );
 
     let events = events_res.or_log("now:events_res");
-    let cmpg   = camps_res.or_log("now:camps_res");
+    let cmpg = camps_res.or_log("now:camps_res");
     // Deduplicate: view may return multiple years per title_name; keep the most recent.
     let ttls: Vec<CurrentHolder> = {
         let raw = titles_res.or_log("now:titles_res");
-        let mut seen: std::collections::HashMap<String, CurrentHolder> = std::collections::HashMap::new();
+        let mut seen: std::collections::HashMap<String, CurrentHolder> =
+            std::collections::HashMap::new();
         for t in raw {
             let year = t.year.unwrap_or(0);
             let existing = seen.get(&t.title_name).and_then(|v| v.year).unwrap_or(0);
-            if year >= existing { seen.insert(t.title_name.clone(), t); }
+            if year >= existing {
+                seen.insert(t.title_name.clone(), t);
+            }
         }
         let mut v: Vec<_> = seen.into_values().collect();
-        v.sort_by(|a, b| a.competition_scope.cmp(&b.competition_scope).then(a.title_name.cmp(&b.title_name)));
+        v.sort_by(|a, b| {
+            a.competition_scope
+                .cmp(&b.competition_scope)
+                .then(a.title_name.cmp(&b.title_name))
+        });
         v
     };
 
     // ── Event cards grouped by region ────────────────────────
     let make_event_card = |ev: &EventRow| -> String {
-        let name   = esc(ev.name.as_str());
-        let city   = esc(ev.city.as_deref().unwrap_or(""));
-        let ctry   = esc(ev.country.as_deref().unwrap_or(""));
-        let start  = esc(ev.start_date.as_deref().unwrap_or(""));
-        let end    = esc(ev.end_date.as_deref().unwrap_or(""));
-        let link   = esc(ev.link.as_deref().unwrap_or(""));
-        let etype  = esc(ev.event_type.as_deref().unwrap_or(""));
-        let hot    = ev.hot.unwrap_or(false);
-        let fs     = ev.inclusion_flag_codes.clone().unwrap_or_default();
-        let dates  = if !end.is_empty() && end != start {
+        let name = esc(ev.name.as_str());
+        let city = esc(ev.city.as_deref().unwrap_or(""));
+        let ctry = esc(ev.country.as_deref().unwrap_or(""));
+        let start = esc(ev.start_date.as_deref().unwrap_or(""));
+        let end = esc(ev.end_date.as_deref().unwrap_or(""));
+        let link = esc(ev.link.as_deref().unwrap_or(""));
+        let etype = esc(ev.event_type.as_deref().unwrap_or(""));
+        let hot = ev.hot.unwrap_or(false);
+        let fs = ev.inclusion_flag_codes.clone().unwrap_or_default();
+        let dates = if !end.is_empty() && end != start {
             format!("{start} → {end}")
-        } else { start.to_string() };
+        } else {
+            start.to_string()
+        };
         let link_html = if !link.is_empty() && link != "#" {
-            format!("<a href=\"{link}\" target=\"_blank\" rel=\"noopener\" class=\"btn-o\">Info</a>")
-        } else { String::new() };
+            format!(
+                "<a href=\"{link}\" target=\"_blank\" rel=\"noopener\" class=\"btn-o\">Info</a>"
+            )
+        } else {
+            String::new()
+        };
         let hot_badge = if hot {
-            format!("<span style=\"font-size:9px;background:{ORANGE};color:#fff;\
-                      border-radius:6px;padding:1px 5px;margin-right:4px\">🔥 hot</span>")
-        } else { String::new() };
+            format!(
+                "<span style=\"font-size:9px;background:{ORANGE};color:#fff;\
+                      border-radius:6px;padding:1px 5px;margin-right:4px\">🔥 hot</span>"
+            )
+        } else {
+            String::new()
+        };
         card(&format!(
             "<div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:10px\">\
               <div style=\"flex:1;min-width:0\">\
@@ -98,7 +117,14 @@ pub(crate) async fn zone_now(db: SupabaseClient, lang: &str) -> Response {
             fhtml = flags(&fs),
         ))
     };
-    let region_order = ["North America","Europe","Asia Pacific","Latin America","Africa & Middle East","Other"];
+    let region_order = [
+        "North America",
+        "Europe",
+        "Asia Pacific",
+        "Latin America",
+        "Africa & Middle East",
+        "Other",
+    ];
     let event_cards: String = region_order.iter().filter_map(|&region| {
         let group: Vec<_> = events.iter()
             .filter(|ev| country_region(ev.country.as_deref().unwrap_or("")) == region)
@@ -120,7 +146,9 @@ pub(crate) async fn zone_now(db: SupabaseClient, lang: &str) -> Response {
               </div>\
             </div>"
         )
-    } else { String::new() };
+    } else {
+        String::new()
+    };
 
     // ── Campaign cards ────────────────────────────────────────
     let camp_cards: String = cmpg.iter().take(4).map(|c| {
@@ -164,21 +192,30 @@ pub(crate) async fn zone_now(db: SupabaseClient, lang: &str) -> Response {
     // ── Title holder cards (from current_title_holders view) ─────
     // TBD cards: upcoming title contests without a recorded winner yet.
     // ttls has been deduped above — one entry per title_name
-    let tbd_cards: Vec<(String, String)> = events.iter()
+    let tbd_cards: Vec<(String, String)> = events
+        .iter()
         .filter(|ev| ev.event_type.as_deref().unwrap_or("") == "title")
         .filter_map(|ev| {
-            let name  = esc(&ev.name);
+            let name = esc(&ev.name);
             let start = ev.start_date.clone().unwrap_or_default();
             let already_held = ttls.iter().any(|t| {
                 let comp_name = esc(t.competition_name.as_deref().unwrap_or(""));
                 !comp_name.is_empty() && name.to_lowercase().contains(&comp_name.to_lowercase())
             });
-            if already_held { return None; }
+            if already_held {
+                return None;
+            }
             Some((name, start))
         })
         .collect();
 
-    let scope_order = ["international","continental","national","regional","local"];
+    let scope_order = [
+        "international",
+        "continental",
+        "national",
+        "regional",
+        "local",
+    ];
     let title_cards: String = scope_order.iter().filter_map(|&sc| {
         let group: Vec<&CurrentHolder> = ttls.iter().filter(|t| {
             t.competition_scope.as_deref().unwrap_or("") == sc
@@ -247,13 +284,18 @@ pub(crate) async fn zone_now(db: SupabaseClient, lang: &str) -> Response {
            style=\"display:block;text-align:center;font-size:13px;\
                   color:{ORANGE};padding:4px 0 24px\">Full competition archive →</a>",
         h_events = sh("Happening in the Next 30 Days", Some(events.len())),
-        h_camps  = sh("Community Campaigns", Some(cmpg.len())),
+        h_camps = sh("Community Campaigns", Some(cmpg.len())),
         h_titles = sh("Current Title Holders", Some(ttls.len() + tbd_cards.len())),
     );
 
-    Html(shell("Now", "Bear events in the next 30 days.", "now", &body, lang)).into_response()
+    Html(shell(
+        "Now",
+        "Bear events in the next 30 days.",
+        "now",
+        &body,
+        lang,
+    ))
+    .into_response()
 }
 
 // ── ZONE: COMING UP ───────────────────────────────────────────
-
-

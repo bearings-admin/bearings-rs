@@ -1,4 +1,3 @@
-
 //! Bluesky social publishing agent.
 //!
 //! The DB has agent_posts and agent_inbox tables — this module is the Rust
@@ -99,12 +98,16 @@ pub async fn mark_published(
     post_cid: &str,
 ) -> Result<(), AgentError> {
     let path = format!("agent_posts?id=eq.{}", post_id);
-    db.patch(&path, &serde_json::json!({
-        "status": "published",
-        "post_uri": post_uri,
-        "post_cid": post_cid,
-        "published_at": Utc::now().to_rfc3339(),
-    })).await
+    db.patch(
+        &path,
+        &serde_json::json!({
+            "status": "published",
+            "post_uri": post_uri,
+            "post_cid": post_cid,
+            "published_at": Utc::now().to_rfc3339(),
+        }),
+    )
+    .await
 }
 
 /// Mark a post as failed with an error note.
@@ -114,10 +117,14 @@ pub async fn mark_failed(
     reason: &str,
 ) -> Result<(), AgentError> {
     let path = format!("agent_posts?id=eq.{}", post_id);
-    db.patch(&path, &serde_json::json!({
-        "status": "failed",
-        "notes": reason,
-    })).await
+    db.patch(
+        &path,
+        &serde_json::json!({
+            "status": "failed",
+            "notes": reason,
+        }),
+    )
+    .await
 }
 
 // ── TODO: Bluesky AT Protocol integration ────────────────────

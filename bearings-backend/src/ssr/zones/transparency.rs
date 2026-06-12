@@ -1,17 +1,27 @@
 //! Zone: transparency — public budget, costs, and the wallet that keeps the lights on.
 
-use axum::response::{Html, IntoResponse, Response};
-use crate::db::{SupabaseClient, LogErr};
+use crate::db::{LogErr, SupabaseClient};
+use crate::repositories::transparency_repo::{
+    SupabaseTransparencyRepository, TransparencyRepository,
+};
 use crate::ui::*;
-use crate::repositories::transparency_repo::{TransparencyRepository, SupabaseTransparencyRepository};
+use axum::response::{Html, IntoResponse, Response};
 
 pub(crate) async fn zone_transparency(db: SupabaseClient, lang: &str) -> Response {
     let repo = SupabaseTransparencyRepository::new(db);
-    let costs  = repo.costs().await.or_log("transparency:costs");
+    let costs = repo.costs().await.or_log("transparency:costs");
     let wallet = repo.wallet().await.or_log("transparency:wallet");
 
-    let monthly: f64 = costs.iter().filter(|c| c.cadence == "monthly").map(|c| c.amount_usd).sum();
-    let annual:  f64 = costs.iter().filter(|c| c.cadence == "annual").map(|c| c.amount_usd).sum();
+    let monthly: f64 = costs
+        .iter()
+        .filter(|c| c.cadence == "monthly")
+        .map(|c| c.amount_usd)
+        .sum();
+    let annual: f64 = costs
+        .iter()
+        .filter(|c| c.cadence == "annual")
+        .map(|c| c.amount_usd)
+        .sum();
     let monthly_burn = monthly + annual / 12.0;
 
     let runway = if monthly_burn > 0.0 {
@@ -52,8 +62,13 @@ pub(crate) async fn zone_transparency(db: SupabaseClient, lang: &str) -> Respons
         )
     };
 
-    let updated = if wallet.updated.is_empty() { String::new() } else {
-        format!("<div style=\"font-size:11px;color:{MID};margin-top:6px\">Balance updated {}</div>", esc(&wallet.updated))
+    let updated = if wallet.updated.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<div style=\"font-size:11px;color:{MID};margin-top:6px\">Balance updated {}</div>",
+            esc(&wallet.updated)
+        )
     };
 
     let body = format!(
@@ -86,5 +101,12 @@ pub(crate) async fn zone_transparency(db: SupabaseClient, lang: &str) -> Respons
         chain = esc(&wallet.chain),
     );
 
-    Html(shell("Transparency", "What it costs to run Bearings, and the wallet that pays for it.", "transparency", &body, lang)).into_response()
+    Html(shell(
+        "Transparency",
+        "What it costs to run Bearings, and the wallet that pays for it.",
+        "transparency",
+        &body,
+        lang,
+    ))
+    .into_response()
 }

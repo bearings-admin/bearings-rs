@@ -22,7 +22,10 @@ pub struct TtlCache {
 
 impl TtlCache {
     pub fn new(ttl: Duration) -> Self {
-        Self { ttl, entries: Mutex::new(HashMap::new()) }
+        Self {
+            ttl,
+            entries: Mutex::new(HashMap::new()),
+        }
     }
 
     /// The cached body for `key` if present and not yet expired.
