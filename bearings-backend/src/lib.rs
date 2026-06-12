@@ -110,7 +110,6 @@ pub fn build_app(db: db::SupabaseClient) -> Router {
         .route("/style.css",                     get(stylesheet_css))
         // ── Utility ─────────────────────────────────────────────
         .route("/health",                        get(health))
-        .route("/hello/:name",                   get(routes::hello::handler))
         // ── Middleware ──────────────────────────────────────────
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())

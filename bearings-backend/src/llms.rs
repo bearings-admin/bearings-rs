@@ -24,14 +24,14 @@ pub async fn llms_txt() -> impl IntoResponse {
 Bearings is a verified directory of the global gay bear community.
 
 ## What we contain
-- Events: bear runs, festivals, cruises, socials (130+ events, 25+ countries)
-- Places: bars, leather bars, saunas, campgrounds (170+ venues, 57 fields each)
+- Events: bear runs, festivals, cruises, socials (88 active events, 25+ countries)
+- Places: bars, leather bars, saunas, campgrounds (173 venues)
 - Clubs: community clubs and organising associations (49 clubs)
-- Title holders: competition winners 1992–present (80+ records, IBR complete)
-- Competitions: 32 active bear title competitions worldwide
+- Title holders: competition winners 1992–present (148 records, IBR complete)
+- Competitions: 27 active bear title competitions worldwide
 - Creators: musicians, DJs, authors, illustrators, filmmakers, historians (46 verified)
 - Digital spaces: apps, Discord, podcasts, Twitch (35 spaces)
-- Bear history: community milestones 1987–present (49 records)
+- Bear history: community milestones 1987–present (58 records)
 - Campaigns: active charity fundraising (12 campaigns)
 - Shops: bear-owned shops, gear, and books by bear authors (24 shops)
 
@@ -48,7 +48,7 @@ GET /api/digital-spaces    — apps, Discord, podcasts (?space_type=discord)
 GET /api/stories           — oral histories and community essays
 GET /api/bear-history      — community milestones 1987–present
 GET /api/campaigns         — active charity campaigns
-GET /api/treasury          — live Cardano treasury balances
+GET /api/treasury          — community treasury status (planned, not yet funded)
 GET /api/bear-future       — community governance proposals
 GET /api/inclusion-flags   — CONST-10 inclusion flag reference
 
