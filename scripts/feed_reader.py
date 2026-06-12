@@ -12,6 +12,7 @@ import os, sys, json, re, xml.etree.ElementTree as ET
 from datetime import datetime, timezone, date
 from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
+from digest import build_digest, write_log, send_digest
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
@@ -245,7 +246,7 @@ def process_feed(feed):
         print(f"    ERROR: {e}")
         errors = (feed.get("fetch_errors") or 0) + 1
         api_patch(f"watched_feeds?id=eq.{fid}", {"fetch_errors": errors})
-        return 0
+        return {"org": org, "parsed": 0, "new": 0, "past": 0, "skipped": 0, "error": str(e)}
 
     api_patch(f"watched_feeds?id=eq.{fid}", {
         "last_fetched":  datetime.now(timezone.utc).isoformat(),
@@ -256,7 +257,7 @@ def process_feed(feed):
 
     if status == 304 or raw is None:
         print(f"    304 Not Modified — nothing to parse")
-        return 0
+        return {"org": org, "parsed": 0, "new": 0, "past": 0, "skipped": 0, "error": None}
 
     if is_ical:
         items = parse_ical_items(raw, url)
@@ -265,11 +266,16 @@ def process_feed(feed):
 
     print(f"    {len(items)} items parsed")
 
-    feed_new = feed_skip = 0
+    feed_new = feed_skip = feed_past = 0
+    today_iso = date.today().isoformat()
     for item in items:
         skip_filter = is_ical and ICAL_FEEDS_SKIP_FILTER
         if not looks_like_event(item, skip_filter=skip_filter):
             feed_skip += 1
+            continue
+        ps = item.get("parsed_start")
+        if ps and ps < today_iso:          # never queue events already in the past
+            feed_past += 1
             continue
 
         text = item["raw_title"] + " " + item.get("raw_description", "") + " " + item.get("raw_location", "")
@@ -299,8 +305,9 @@ def process_feed(feed):
         # 409 / duplicate = silent skip
 
     label = "non-event items skipped" if not is_ical else "already-seen skipped"
-    print(f"    {feed_new} new candidates  |  {feed_skip} {label}")
-    return feed_new
+    print(f"    {feed_new} new  |  {feed_past} past-skipped  |  {feed_skip} {label}")
+    return {"org": org, "parsed": len(items), "new": feed_new,
+            "past": feed_past, "skipped": feed_skip, "error": None}
 
 # ── Main ───────────────────────────────────────────────────────
 
@@ -319,11 +326,11 @@ def report_missing_title_holders():
             "?select=name,scope,country,city,website&order=scope.asc,country.asc")
     except Exception as e:
         print(f"\n[title-holders] could not load gap view: {e}")
-        return
+        return []
 
     if not gaps:
         print("\n[title-holders] no gaps - every active competition has a holder.")
-        return
+        return []
 
     print(f"\n[title-holders] {len(gaps)} competitions missing holders:")
     for g in gaps:
@@ -355,6 +362,7 @@ def report_missing_title_holders():
 
     print("[title-holders] leads are UNVERIFIED - steward confirms a source "
           "before adding (no guessed names).")
+    return gaps
 
 
 def main():
@@ -371,13 +379,24 @@ def main():
     ical_feeds  = [f for f in feeds if f["feed_type"] in ("ical", "ical-static")]
     print(f"  {len(rss_feeds)} RSS  |  {len(ical_feeds)} iCal  feeds active")
 
-    total_new = 0
+    stats = []
     for feed in feeds:
-        total_new += process_feed(feed)
+        stats.append(process_feed(feed))
 
-    print(f"\n[done] {total_new} total new candidates queued for review")
+    total_new  = sum(s["new"] for s in stats)
+    total_past = sum(s["past"] for s in stats)
+    print(f"\n[done] {total_new} new candidates queued  |  {total_past} past-dated skipped")
 
-    report_missing_title_holders()
+    gaps = report_missing_title_holders()
+
+    try:
+        pending_count = len(api_get("candidate_events?status=eq.pending&select=id"))
+    except Exception:
+        pending_count = -1
+
+    digest = build_digest(ts, stats, total_new, total_past, pending_count, gaps)
+    write_log(digest)
+    send_digest(digest)
 
 if __name__ == "__main__":
     env_path = "/opt/bearings-rs/.env"
