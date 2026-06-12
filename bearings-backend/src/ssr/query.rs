@@ -129,6 +129,8 @@ pub(crate) struct TitleHolderRow {
     pub inclusion_flag_codes: Option<Vec<String>>,
     pub holder_status:        Option<String>,
     pub bio:                   Option<String>,
+    pub charity_name:         Option<String>,
+    pub charity_link:         Option<String>,
 }
 
 // ── Creators ─────────────────────────────────────────────────────────────────

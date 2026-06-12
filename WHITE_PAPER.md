@@ -114,8 +114,10 @@ Submissions from criminalised countries activate `privacy_mode` (cannot be overr
 by vote or directive).
 
 Competition archive completeness: IBR (San Francisco, 1992–2011) complete; NAB Weekend
-mostly complete; Mr Bear International (2024–) complete; Mr Bear UK and Mr TBRU partial,
-outreach pending.
+mostly complete; Mr Bear International (2024–) complete; Mr Bear UK (2022–) complete; Mr TBRU partial, outreach pending. Belgium, Luxembourg
+and Poland national lineages were added in-language with sources, and Mr. Bear Canada
+(national), Mr Bear Japan, Mr Bear Norway and Mr Bear Portugal archived — no national
+title exists (a duplicate, or club/event-anchored scenes).
 
 **Commerce and affiliates (CONST-5).** Two link types, always disclosed. Bear-owned
 shops and direct sellers are linked **directly** — no skim. Marketplace products

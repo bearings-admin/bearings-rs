@@ -21,7 +21,7 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
     // Fetch all title holders (historical + current)
     let url_holders = format!(
         "{}/rest/v1/title_holders\
-         ?select=competition_id,holder_name,year,city,country,inclusion_flag_codes,holder_status\
+         ?select=competition_id,holder_name,year,city,country,inclusion_flag_codes,holder_status,charity_name,charity_link\
          &order=competition_id.asc,year.desc&limit=500",
         db.url
     );
@@ -175,12 +175,23 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
                     comp_holders.len() - 12)
             } else { String::new() };
 
+            let charity_h = comp_holders.iter().find_map(|h| {
+                let n = h.charity_name.as_deref().filter(|s| !s.is_empty())?;
+                let label = esc(n);
+                let link = esc(h.charity_link.as_deref().unwrap_or(""));
+                Some(if !link.is_empty() && link != "#" {
+                    format!("<div style=\"font-size:11px;color:{BROWN};margin-top:4px\">\u{1f49a} Supports <a href=\"{link}\" target=\"_blank\" rel=\"noopener\" style=\"color:{BROWN}\">{label}</a></div>")
+                } else {
+                    format!("<div style=\"font-size:11px;color:{BROWN};margin-top:4px\">\u{1f49a} Supports {label}</div>")
+                })
+            }).unwrap_or_default();
+
             sections.push_str(&card(&format!(
                 "<div>\
                   <div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:8px\">\
                     <div style=\"flex:1\">\
                       <div style=\"font-weight:700;font-size:15px\">{icon} {cname}</div>\
-                      <div style=\"font-size:11px;color:{MID};margin-top:2px\">{meta}</div>\
+                      <div style=\"font-size:11px;color:{MID};margin-top:2px\">{meta}</div>{charity_h}\
                     </div>\
                     <div style=\"display:flex;flex-direction:column;gap:4px;align-items:flex-end\">\
                       {site_btn}{club_btn}\
