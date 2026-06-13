@@ -80,36 +80,51 @@ pub(crate) fn shell(
         )
     };
 
-    // Directory menu items (hamburger)
-    let dir_items: &[(&str, &str, &str)] = &[
-        ("places", "🍺", "nav.places"),
-        ("clubs", "🏳\u{fe0f}", "nav.clubs"),
-        ("creators", "🎨", "nav.creators"),
-        ("shops", "\u{1f6cd}\u{fe0f}", "nav.shops"),
-        ("titles", "🏆", "nav.titles"),
-        ("campaigns", "💚", "nav.campaigns"),
-        ("digital-spaces", "📱", "nav.digital"),
-    ];
-    let dir_links: String = dir_items
-        .iter()
-        .map(|(zone, icon, key)| {
-            let on = zone == &active;
-            format!(
-                "<a href=\"/?zone={zone}&lang={lang}\" \
+    // Drawer link builder, reused across nav sections
+    let drawer_link = |zone: &str, icon: &str, key: &str| {
+        let on = zone == active;
+        format!(
+            "<a href=\"/?zone={zone}&lang={lang}\" \
                style=\"display:flex;align-items:center;gap:10px;\
                        padding:10px 0;border-bottom:1px solid {TAN};\
                        text-decoration:none;color:{col};font-weight:{fw}\">\
               <span style=\"font-size:18px\">{icon}</span>\
               <span style=\"font-size:14px\">{label}</span>\
             </a>",
-                col = if on { ORANGE } else { DARK },
-                fw = if on { "700" } else { "400" },
-                label = tl(key),
-            )
-        })
-        .collect();
-
-    let _ = tl;
+            col = if on { ORANGE } else { DARK },
+            fw = if on { "700" } else { "400" },
+            label = tl(key),
+        )
+    };
+    let dir_links: String = [
+        ("places", "🍺", "nav.places"),
+        ("clubs", "🏳\u{fe0f}", "nav.clubs"),
+        ("creators", "🎨", "nav.creators"),
+        ("shops", "\u{1f6cd}\u{fe0f}", "nav.shops"),
+        ("titles", "🏆", "nav.titles"),
+        ("digital-spaces", "📱", "nav.digital"),
+    ]
+    .iter()
+    .map(|&(z, i, k)| drawer_link(z, i, k))
+    .collect();
+    let timeline_links: String = [
+        ("archive", "📚", "nav.archive"),
+        ("future", "🔭", "nav.future"),
+        ("ical", "📅", "nav.ical"),
+    ]
+    .iter()
+    .map(|&(z, i, k)| drawer_link(z, i, k))
+    .collect();
+    let support_links: String = [
+        ("campaigns", "💚", "nav.campaigns"),
+        ("transparency", "💸", "nav.transparency"),
+    ]
+    .iter()
+    .map(|&(z, i, k)| drawer_link(z, i, k))
+    .collect();
+    let nav_dir = tl("nav.directory");
+    let nav_tl = tl("nav.timeline");
+    let nav_sup = tl("nav.support");
     format!(
         "<!DOCTYPE html>\n\
 <html lang=\"{lang}\">\n\
@@ -141,19 +156,14 @@ pub(crate) fn shell(
   <div class=\"drawer-panel\">\n\
     <label for=\"drawer-toggle\" class=\"drawer-close-btn\">✕</label>\n\
     <div style=\"font-size:10px;font-weight:700;letter-spacing:.1em;\
-text-transform:uppercase;color:{MID};margin-bottom:4px\">Directory</div>\n\
+text-transform:uppercase;color:{MID};margin-bottom:4px\">{nav_dir}</div>\n\
     {dir_links}\n\
     <div style=\"margin-top:20px;font-size:10px;font-weight:700;letter-spacing:.1em;\
-text-transform:uppercase;color:{MID};margin-bottom:4px\">Timeline</div>\n\
-    <a href=\"/?zone=archive&lang={lang}\" style=\"display:flex;align-items:center;gap:10px;\
-padding:10px 0;border-bottom:1px solid {TAN};text-decoration:none;color:{DARK}\">\
-<span style=\"font-size:18px\">📚</span><span style=\"font-size:14px\">Bear Archive</span></a>\n\
-    <a href=\"/?zone=future&lang={lang}\" style=\"display:flex;align-items:center;gap:10px;\
-padding:10px 0;border-bottom:1px solid {TAN};text-decoration:none;color:{DARK}\">\
-<span style=\"font-size:18px\">🔭</span><span style=\"font-size:14px\">Bear Future</span></a>\n\
-    <a href=\"/?zone=ical&lang={lang}\" style=\"display:flex;align-items:center;gap:10px;\
-padding:10px 0;text-decoration:none;color:{DARK}\">\
-<span style=\"font-size:18px\">📅</span><span style=\"font-size:14px\">iCal Export</span></a><a href=\"/?zone=transparency&lang={lang}\" style=\"display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid {TAN};text-decoration:none;color:{DARK}\"><span style=\"font-size:18px\">💸</span><span style=\"font-size:14px\">Transparency</span></a>\n\
+text-transform:uppercase;color:{MID};margin-bottom:4px\">{nav_tl}</div>\n\
+    {timeline_links}\n\
+    <div style=\"margin-top:20px;font-size:10px;font-weight:700;letter-spacing:.1em;\
+text-transform:uppercase;color:{MID};margin-bottom:4px\">{nav_sup}</div>\n\
+    {support_links}\n\
   </div>\n\
 \n\
   <header style=\"max-width:640px;margin:0 auto;padding:10px 16px 8px\">\n\
@@ -186,10 +196,10 @@ padding:5px 8px 10px\">\n\
 \n\
 </body>\n\
 </html>",
-        n_archive  = tnav_svg("archive",   "Archive",  "<svg width=\'22\' height=\'22\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><circle cx=\'12\' cy=\'12\' r=\'9\'/><polyline points=\'12 7 12 12 9 15\'/></svg>"),
-        n_now      = tnav_svg("now",        "Now",      "<svg width=\'22\' height=\'22\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><path d=\'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z\'/><circle cx=\'12\' cy=\'9\' r=\'2.5\'/></svg>"),
-        n_upcoming = tnav_svg("coming-up",  "Upcoming", "<svg width=\'22\' height=\'22\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><rect x=\'3\' y=\'4\' width=\'18\' height=\'18\' rx=\'2\'/><line x1=\'16\' y1=\'2\' x2=\'16\' y2=\'6\'/><line x1=\'8\' y1=\'2\' x2=\'8\' y2=\'6\'/><line x1=\'3\' y1=\'10\' x2=\'21\' y2=\'10\'/><line x1=\'8\' y1=\'15\' x2=\'10\' y2=\'15\'/><line x1=\'12\' y1=\'15\' x2=\'16\' y2=\'15\'/></svg>"),
-        n_future   = tnav_svg("future",     "Future",   "<svg width=\'22\' height=\'22\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><circle cx=\'12\' cy=\'12\' r=\'9\'/><line x1=\'12\' y1=\'8\' x2=\'12\' y2=\'12\'/><line x1=\'12\' y1=\'12\' x2=\'15\' y2=\'14\'/><circle cx=\'12\' cy=\'12\' r=\'1.5\' fill=\'currentColor\'/></svg>"),
+        n_archive  = tnav_svg("archive",   &tl("nav.archive"),  "<svg width=\'22\' height=\'22\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><circle cx=\'12\' cy=\'12\' r=\'9\'/><polyline points=\'12 7 12 12 9 15\'/></svg>"),
+        n_now      = tnav_svg("now",        &tl("nav.now"),      "<svg width=\'22\' height=\'22\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><path d=\'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z\'/><circle cx=\'12\' cy=\'9\' r=\'2.5\'/></svg>"),
+        n_upcoming = tnav_svg("coming-up",  &tl("nav.upcoming"), "<svg width=\'22\' height=\'22\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><rect x=\'3\' y=\'4\' width=\'18\' height=\'18\' rx=\'2\'/><line x1=\'16\' y1=\'2\' x2=\'16\' y2=\'6\'/><line x1=\'8\' y1=\'2\' x2=\'8\' y2=\'6\'/><line x1=\'3\' y1=\'10\' x2=\'21\' y2=\'10\'/><line x1=\'8\' y1=\'15\' x2=\'10\' y2=\'15\'/><line x1=\'12\' y1=\'15\' x2=\'16\' y2=\'15\'/></svg>"),
+        n_future   = tnav_svg("future",     &tl("nav.future"),   "<svg width=\'22\' height=\'22\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><circle cx=\'12\' cy=\'12\' r=\'9\'/><line x1=\'12\' y1=\'8\' x2=\'12\' y2=\'12\'/><line x1=\'12\' y1=\'12\' x2=\'15\' y2=\'14\'/><circle cx=\'12\' cy=\'12\' r=\'1.5\' fill=\'currentColor\'/></svg>"),
     )
 }
 

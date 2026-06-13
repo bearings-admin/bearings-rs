@@ -178,6 +178,13 @@ pub fn translations() -> &'static I18nStore {
         en.insert("media.type.single", "Single");
         en.insert("media.type.zine", "Zine");
         en.insert("nav.archive", "Archive");
+        en.insert("nav.now", "Now");
+        en.insert("nav.upcoming", "Upcoming");
+        en.insert("nav.future", "Future");
+        en.insert("nav.ical", "iCal Export");
+        en.insert("nav.transparency", "Transparency");
+        en.insert("nav.directory", "Directory");
+        en.insert("nav.support", "Support");
         en.insert("nav.campaigns", "Campaigns");
         en.insert("nav.clubs", "Clubs");
         en.insert("nav.creators", "Creators");
@@ -468,6 +475,13 @@ pub fn translations() -> &'static I18nStore {
         es.insert("media.type.single", "Single");
         es.insert("media.type.zine", "Fanzine");
         es.insert("nav.archive", "Archivo");
+        es.insert("nav.now", "Ahora");
+        es.insert("nav.upcoming", "Próximos");
+        es.insert("nav.future", "Futuro");
+        es.insert("nav.ical", "Exportar iCal");
+        es.insert("nav.transparency", "Transparencia");
+        es.insert("nav.directory", "Directorio");
+        es.insert("nav.support", "Apoyo");
         es.insert("nav.campaigns", "Campañas");
         es.insert("nav.clubs", "Clubs");
         es.insert("nav.creators", "Creadores");
@@ -745,6 +759,13 @@ pub fn translations() -> &'static I18nStore {
         fr.insert("media.type.single", "Single");
         fr.insert("media.type.zine", "Zine");
         fr.insert("nav.archive", "Archives");
+        fr.insert("nav.now", "Maintenant");
+        fr.insert("nav.upcoming", "À venir");
+        fr.insert("nav.future", "Futur");
+        fr.insert("nav.ical", "Export iCal");
+        fr.insert("nav.transparency", "Transparence");
+        fr.insert("nav.directory", "Répertoire");
+        fr.insert("nav.support", "Soutien");
         fr.insert("nav.campaigns", "Campagnes");
         fr.insert("nav.clubs", "Clubs");
         fr.insert("nav.creators", "Créateurs");
@@ -868,6 +889,13 @@ pub fn translations() -> &'static I18nStore {
 
         let mut ja: LangMap = HashMap::new();
         ja.insert("nav.archive", "アーカイブ");
+        ja.insert("nav.now", "現在");
+        ja.insert("nav.upcoming", "今後の予定");
+        ja.insert("nav.future", "フューチャー");
+        ja.insert("nav.ical", "iCalエクスポート");
+        ja.insert("nav.transparency", "透明性");
+        ja.insert("nav.directory", "ディレクトリ");
+        ja.insert("nav.support", "サポート");
         ja.insert("nav.campaigns", "キャンペーン");
         ja.insert("nav.clubs", "クラブ");
         ja.insert("nav.creators", "クリエイター");
