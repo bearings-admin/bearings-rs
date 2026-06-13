@@ -128,7 +128,7 @@ pub(crate) fn shell(
   <link rel=\"canonical\" href=\"https://www.bearings.community/\">\n\
   <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n\
   <link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap\">\n\
-  <script src=\"https://unpkg.com/htmx.org@1.9.12\" integrity=\"sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2uodhR9KnjpfIe58rYolbAZ9sIMnBWxrBvf\" crossorigin=\"anonymous\"></script>\n\
+  <script src=\"https://unpkg.com/htmx.org@1.9.12\" integrity=\"sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2\" crossorigin=\"anonymous\"></script>\n\
   <link rel=\"stylesheet\" href=\"/style.css\">\n\
 </head>\n\
 <body style=\"padding-bottom:72px\">\n\
