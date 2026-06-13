@@ -5,7 +5,7 @@ use crate::{db::SupabaseClient, ui::*};
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Response};
 #[allow(unused_imports)]
-use chrono::{Months, Utc};
+use chrono::{Datelike, Months, NaiveDate, Utc};
 #[allow(unused_imports)]
 use std::collections::HashMap;
 
@@ -16,15 +16,39 @@ pub(crate) async fn zone_coming_up(
     month_filter: Option<u32>,
     lang: &str,
 ) -> Response {
-    let months = months_ahead.unwrap_or(6).clamp(1, 24);
     let country = event_country.as_deref().unwrap_or("");
 
-    // Compute date window
+    // Compute the date window from the selected "when" value. Most options are a
+    // cumulative "today -> today + N months" range, but two are fixed windows that
+    // skip the near term, encoded as sentinels so the <select> still submits a
+    // single numeric months_ahead:
+    //   612 = 6 months to a year out (excludes the next 6 months)
+    //   999 = the next calendar year (Jan 1 - Dec 31)
     let today = Utc::now().date_naive();
-    let to_date = today
-        .checked_add_months(Months::new(months))
-        .unwrap_or(today);
-    let from_str = today.format("%Y-%m-%d").to_string();
+    let (from_date, to_date, sel_val) = match months_ahead.unwrap_or(6) {
+        612 => (
+            today.checked_add_months(Months::new(6)).unwrap_or(today),
+            today.checked_add_months(Months::new(12)).unwrap_or(today),
+            612u32,
+        ),
+        999 => {
+            let ny = today.year() + 1;
+            (
+                NaiveDate::from_ymd_opt(ny, 1, 1).unwrap_or(today),
+                NaiveDate::from_ymd_opt(ny, 12, 31).unwrap_or(today),
+                999u32,
+            )
+        }
+        n => {
+            let m = n.clamp(1, 24);
+            (
+                today,
+                today.checked_add_months(Months::new(m)).unwrap_or(today),
+                m,
+            )
+        }
+    };
+    let from_str = from_date.format("%Y-%m-%d").to_string();
     let to_str = to_date.format("%Y-%m-%d").to_string();
 
     let country_val = if country.is_empty() {
@@ -77,12 +101,13 @@ pub(crate) async fn zone_coming_up(
         (2, "Next 2 months"),
         (3, "Next 3 months"),
         (6, "Next 6 months"),
-        (12, "Next year"),
+        (612, "6 months to a year"),
+        (999, "Next year"),
     ];
     let months_sel: String = months_opts
         .iter()
         .map(|(v, l)| {
-            let sel = if *v == months { " selected" } else { "" };
+            let sel = if *v == sel_val { " selected" } else { "" };
             format!("<option value=\"{v}\"{sel}>{l}</option>")
         })
         .collect();
@@ -142,7 +167,7 @@ pub(crate) async fn zone_coming_up(
     };
     let month_label = months_opts
         .iter()
-        .find(|(v, _)| *v == months)
+        .find(|(v, _)| *v == sel_val)
         .map(|(_, l)| *l)
         .unwrap_or("6 months");
 
@@ -152,7 +177,7 @@ pub(crate) async fn zone_coming_up(
     } else {
         format!("&event_country={}", urlencoding::encode(country))
     };
-    let bar_base = format!("/?zone=coming-up&months_ahead={months}&lang={lang}{country_enc}");
+    let bar_base = format!("/?zone=coming-up&months_ahead={sel_val}&lang={lang}{country_enc}");
     let bar = timeline_bar(
         &events
             .iter()
