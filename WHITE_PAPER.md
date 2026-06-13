@@ -47,9 +47,9 @@ their books; and **Shops**, bear-owned shops and community gear, kept a separate
 so commerce never crowds the directory.
 
 **Data as of June 2026:** 88 events, 173 places (saunas, bars, campgrounds, leather
-bars), 49 clubs, 33 competitions, 135 title holders, 58 history entries, 46 creators
-(incl. international DJs and authors), 24 bear shops, 11 books, 35 digital spaces,
-12 campaigns, 10 in-language bear-region profiles, ~1,190 translation rows across
+bars), 49 clubs, 28 competitions, 154 title holders, 52 history entries, 49 creators
+(incl. international DJs and authors), 21 bear shops, 11 books, 35 digital spaces,
+13 campaigns, 10 in-language bear-region profiles, ~1,190 translation rows across
 four baked languages (EN/ES/FR/JA).
 
 ---
