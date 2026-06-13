@@ -26,7 +26,7 @@ pub(crate) async fn zone_places(
     };
     let url_all = format!(
         "{}/rest/v1/places?active=eq.true\
-         &select=place_type,country\
+         &select=name,place_type,country\
          {cc}\
          &limit=500",
         db.url
@@ -119,36 +119,6 @@ pub(crate) async fn zone_places(
         })
         .collect();
 
-    // Country dropdown
-    let ctry_opts: Vec<(String, String)> =
-        std::iter::once(("".to_string(), "🌍 All regions".to_string()))
-            .chain(countries.iter().map(|c| (c.clone(), c.clone())))
-            .collect();
-    let ctry_sel: String = ctry_opts
-        .iter()
-        .map(|(v, l)| {
-            let sel = if v.as_str() == fc { " selected" } else { "" };
-            format!("<option value=\"{v}\"{sel}>{l}</option>")
-        })
-        .collect();
-    let sel_style = format!(
-        "font-size:12px;padding:6px 12px;border-radius:20px;\
-         border:1px solid {TAN};background:{OFF_WHITE};color:{DARK};\
-         font-family:inherit"
-    );
-
-    // Place type label for the active filter
-    let type_label = type_tabs
-        .iter()
-        .find(|(s, _, _)| *s == ft)
-        .map(|(_, l, _)| *l)
-        .unwrap_or("All");
-    let region_label = if fc.is_empty() {
-        "worldwide".to_string()
-    } else {
-        fc.to_string()
-    };
-
     // Region grouping definitions (same optgroups as coming-up country selector)
     let place_regions: &[(&str, &[&str])] = &[
         ("North America", &["Canada", "USA", "Mexico", "Puerto Rico"]),
@@ -195,6 +165,55 @@ pub(crate) async fn zone_places(
             &["Egypt", "Morocco", "South Africa"],
         ),
     ];
+
+    // Country dropdown
+    let present: std::collections::HashSet<&str> = countries.iter().map(|s| s.as_str()).collect();
+    let sel_attr = |v: &str| if v == fc { " selected" } else { "" };
+    let mut ctry_sel = format!(
+        "<option value=\"\"{}>\u{1f30d} All regions</option>",
+        sel_attr("")
+    );
+    let mut placed: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    for (region, region_countries) in place_regions {
+        let opts: String = region_countries
+            .iter()
+            .copied()
+            .filter(|c| present.contains(c))
+            .map(|c| {
+                placed.insert(c);
+                format!("<option value=\"{c}\"{}>{c}</option>", sel_attr(c))
+            })
+            .collect();
+        if !opts.is_empty() {
+            ctry_sel.push_str(&format!("<optgroup label=\"{region}\">{opts}</optgroup>"));
+        }
+    }
+    let other: String = countries
+        .iter()
+        .map(|s| s.as_str())
+        .filter(|c| !placed.contains(c))
+        .map(|c| format!("<option value=\"{c}\"{}>{c}</option>", sel_attr(c)))
+        .collect();
+    if !other.is_empty() {
+        ctry_sel.push_str(&format!("<optgroup label=\"Other\">{other}</optgroup>"));
+    }
+    let sel_style = format!(
+        "font-size:12px;padding:6px 12px;border-radius:20px;\
+         border:1px solid {TAN};background:{OFF_WHITE};color:{DARK};\
+         font-family:inherit"
+    );
+
+    // Place type label for the active filter
+    let type_label = type_tabs
+        .iter()
+        .find(|(s, _, _)| *s == ft)
+        .map(|(_, l, _)| *l)
+        .unwrap_or("All");
+    let region_label = if fc.is_empty() {
+        "worldwide".to_string()
+    } else {
+        fc.to_string()
+    };
 
     // Group places by type for display when "All" is selected + no country, else by type or flat
     let items_html: String = if ft.is_empty() && fc.is_empty() {
