@@ -28,7 +28,7 @@ pub(crate) async fn zone_archive(
         db.url
     );
     let stories_url = format!(
-        "{}/rest/v1/stories?active=eq.true\
+        "{}/rest/v1/stories?active=eq.true&privacy_mode=eq.false\
          &select=title,story_type,year,excerpt\
          &order=year.desc&limit=100",
         db.url

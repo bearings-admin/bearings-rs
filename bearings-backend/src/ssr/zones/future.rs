@@ -13,7 +13,7 @@ pub(crate) async fn zone_future(db: SupabaseClient, lang: &str) -> Response {
     // Fetch active campaigns
     let url_camps = format!(
         "{}/rest/v1/campaigns\
-         ?active=eq.true\
+         ?active=eq.true&privacy_mode=eq.false\
          &select=name,org,description,link,raised,goal,currency,urgent,ends_at\
          &order=urgent.desc,ends_at.asc.nullslast\
          &limit=20",
@@ -22,28 +22,17 @@ pub(crate) async fn zone_future(db: SupabaseClient, lang: &str) -> Response {
     // Fetch recent titleholders (milestones)
     let url_recent = format!(
         "{}/rest/v1/title_holders\
-         ?year=gte.2023\
+         ?year=gte.2023&active=eq.true\
          &select=holder_name,year,city,country,title_name,competition_id,inclusion_flag_codes,bio\
          &order=year.desc&limit=20",
         db.url
     );
-    // Fetch ideas from DB ordered by upvotes desc
-    let url_ideas = format!(
-        "{}/rest/v1/future_ideas\
-         ?active=eq.true\
-         &select=id,icon,title,description,upvotes,source\
-         &order=upvotes.desc,id.asc\
-         &limit=20",
-        db.url
-    );
-    let (camps_res, recent_res, ideas_res) = tokio::join!(
+    let (camps_res, recent_res) = tokio::join!(
         db.get_json::<Vec<CampaignRow>>(&url_camps),
         db.get_json::<Vec<TitleHolderRow>>(&url_recent),
-        db.get_json::<Vec<FutureIdeaRow>>(&url_ideas),
     );
     let campaigns: Vec<CampaignRow> = camps_res.or_log("future:camps_res");
     let recent_title: Vec<TitleHolderRow> = recent_res.or_log("future:recent_res");
-    let ideas: Vec<FutureIdeaRow> = ideas_res.or_log("future:ideas_res");
 
     // ── Section 1: Active Campaigns ───────────────────────────
     let camp_cards: String = campaigns.iter().map(|c| {
@@ -161,13 +150,12 @@ pub(crate) async fn zone_future(db: SupabaseClient, lang: &str) -> Response {
               which tracks the legal status of same-sex relationships in every country.</p>\
             <div style=\"border-left:3px solid {ORANGE};padding-left:12px;margin:10px 0\">\
               <strong style=\"color:{BROWN}\">Malaysia</strong> — Homosexuality is criminalized under both \
-              civil and Sharia law. In 2026, Mr Bear International titleholder Gavin Chow (the first \
-              Malaysian to hold the title) struggled to find a venue willing to host the national qualifier. \
+              civil and Sharia law. In 2026, the first Mr Bear International titleholder from Malaysia (name withheld for safety) struggled to find a venue willing to host the national qualifier. \
               His reign is an act of visibility under genuine personal risk.\
             </div>\
             <div style=\"border-left:3px solid {GOLD};padding-left:12px;margin:10px 0\">\
               <strong style=\"color:{BROWN}\">Middle East &amp; North Africa</strong> — \
-              Bilal Sakr (Mr Bear Canada 2025), the first openly Middle Eastern titleholder of a major \
+              Bilal Sakr (Mr Bear Montreal 2024), the first openly Middle Eastern titleholder of a major \
               bear competition, actively fundraises for Rainbow Railroad supporting LGBTQ+ refugees \
               from the region.\
             </div>\
@@ -185,73 +173,14 @@ pub(crate) async fn zone_future(db: SupabaseClient, lang: &str) -> Response {
         </div>"
     );
 
-    // ── Section 4: What Could Be — DB ideas with upvote buttons ─
-    let idea_cards: String = ideas.iter().enumerate().map(|(i, idea)| {
-        let id      = idea.id.unwrap_or(0);
-        let icon    = esc(idea.icon.as_deref().unwrap_or("💡"));
-        let title   = esc(idea.title.as_deref().unwrap_or(""));
-        let desc    = esc(idea.description.as_deref().unwrap_or(""));
-        let upvotes = idea.upvotes.unwrap_or(0);
-        let source  = idea.source.as_deref().unwrap_or("curated");
-
-        let source_badge = match source {
-            "community" => format!("<span style=\"font-size:9px;background:{GOLD};color:{DARK};\
-                            border-radius:6px;padding:1px 5px;margin-left:6px\">community</span>"),
-            "ai"        => format!("<span style=\"font-size:9px;background:{TAN};color:{BROWN};\
-                            border-radius:6px;padding:1px 5px;margin-left:6px\">AI</span>"),
-            _           => String::new(),
-        };
-
-        // Top idea gets a subtle highlight
-        let card_extra = if i == 0 {
-            format!("border:1px solid {ORANGE};")
-        } else { String::new() };
-
-        format!(
-            "<div class=\"card\" style=\"margin-bottom:8px;{card_extra}\">\
-              <div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:10px\">\
-                <div style=\"flex:1;min-width:0\">\
-                  <div style=\"font-size:15px;font-weight:700;color:{BROWN};margin-bottom:4px\">\
-                    {icon} {title}{source_badge}</div>\
-                  <div style=\"font-size:12px;color:{MID};line-height:1.7\">{desc}</div>\
-                </div>\
-                <div hx-post=\"/api/future-ideas/{id}/upvote\"\
-                     hx-swap=\"outerHTML\"\
-                     hx-target=\"this\"\
-                     style=\"flex-shrink:0;display:flex;flex-direction:column;\
-                             align-items:center;cursor:pointer;padding:6px 10px;\
-                             border-radius:10px;border:1px solid {TAN};\
-                             background:{OFF_WHITE};color:{BROWN};transition:all .15s;\
-                             user-select:none;min-width:44px\"\
-                     onclick=\"this.style.background='{ORANGE}';this.style.color='#fff'\">\
-                  <span style=\"font-size:16px;line-height:1\">▲</span>\
-                  <span style=\"font-size:12px;font-weight:700;margin-top:2px\">{upvotes}</span>\
-                </div>\
-              </div>\
-            </div>",
-        )
-    }).collect();
-
-    let submit_card = format!(
-        "<div class=\"card\" style=\"text-align:center;margin-top:4px\">\
-          <div style=\"font-size:12px;color:{MID};margin-bottom:6px\">\
-            Have an idea? The bottom of the list rotates with community suggestions.</div>\
-          <a href=\"mailto:ursasteward@pm.me?subject=Bear%20Future%20Idea\" class=\"btn-o\">\
-            Submit an idea</a>\
-        </div>"
-    );
-
     let h3 = format!(
         "<div style=\"font-size:14px;font-weight:700;color:{BROWN};margin:12px 0 6px;\
                border-left:3px solid {ORANGE};padding-left:8px\">New Bear Territories</div>"
     );
-    let h4 = format!("<div style=\"font-size:14px;font-weight:700;color:{BROWN};margin:12px 0 6px;\
-               border-left:3px solid {GOLD};padding-left:8px\">What Could Be \
-               <span style=\"font-size:11px;font-weight:400;color:{MID}\">· upvote to sort</span></div>");
     let body = format!(
         "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Bear Future</h1>\
         <p style=\"font-size:12px;color:{MID};margin-bottom:16px\">\
-          How bears are already making tomorrow better — and what could be.</p>\
+          How bears are already making tomorrow better.</p>\
         \
         {h1}\
         {camp_cards}\
@@ -262,11 +191,7 @@ pub(crate) async fn zone_future(db: SupabaseClient, lang: &str) -> Response {
         {empty_milestones}\
         \
         {h3}\
-        {regions_html}\
-        \
-        {h4}\
-        {idea_cards}\
-        {submit_card}",
+        {regions_html}",
         h1 = sh("Bears Taking Action", Some(campaigns.len())),
         h2 = sh("Breaking Ground — Recent Milestones", Some(recent_title.len())),
         empty_camps = if campaigns.is_empty() {
