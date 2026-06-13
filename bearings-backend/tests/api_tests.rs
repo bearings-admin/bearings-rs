@@ -214,3 +214,85 @@ async fn places_zone_renders_regions_and_counts() {
         "Sauna type tile missing -- counts likely zeroed"
     );
 }
+
+/// Coming Up must render real event cards, not the empty state. Guards the
+/// silent-empty class (RPC deserialize fails -> empty Vec -> "No events found"),
+/// which the status-200 smoke test passes straight through.
+#[tokio::test]
+async fn coming_up_zone_renders_event_cards() {
+    let Some(server) = live_server() else {
+        return;
+    };
+    let resp = server.get("/?zone=coming-up").await;
+    resp.assert_status_ok();
+    let body = resp.text();
+    // The empty-state block only renders when disp_events is empty.
+    assert!(
+        !body.contains("No events found"),
+        "coming-up shows empty state -- events likely failed to load"
+    );
+    // Worldwide view groups events under region headers; at least one proves a
+    // non-empty event list actually rendered into cards.
+    let regions = [
+        "North America",
+        "Europe",
+        "Asia Pacific",
+        "Latin America",
+        "Africa & Middle East",
+    ];
+    assert!(
+        regions.iter().any(|r| body.contains(r)),
+        "no region group header -- event cards did not render"
+    );
+}
+
+/// Titles must render both the competition sections and their holder rows.
+/// Holders and competitions come from two separate queries; either failing
+/// silently would leave the page looking structurally fine but hollow.
+#[tokio::test]
+async fn titles_zone_renders_competitions_and_holders() {
+    let Some(server) = live_server() else {
+        return;
+    };
+    let resp = server.get("/?zone=titles").await;
+    resp.assert_status_ok();
+    let body = resp.text();
+    // A scope section header proves the competitions query deserialized.
+    // International is permanent (IBR), so this is stable across data changes.
+    assert!(
+        body.contains(">International<"),
+        "no International scope section -- competitions likely empty"
+    );
+    // This style fragment is emitted once per holder row (the year badge), so its
+    // presence proves the holders query deserialized and at least one row rendered.
+    assert!(
+        body.contains("color:#C8B89A;flex-shrink:0"),
+        "no holder rows -- title_holders likely failed to load"
+    );
+}
+
+/// Creators must render at least one craft section. Each SECTIONS heading is
+/// only emitted when its group is non-empty, so any heading proves the creators
+/// query loaded and the by-craft grouping ran.
+#[tokio::test]
+async fn creators_zone_renders_a_section() {
+    let Some(server) = live_server() else {
+        return;
+    };
+    let resp = server.get("/?zone=creators").await;
+    resp.assert_status_ok();
+    let body = resp.text();
+    let headings = [
+        "Musicians",
+        "DJs",
+        "Authors",
+        "Visual artists",
+        "Film & video",
+        "Performers",
+        "Podcasters",
+    ];
+    assert!(
+        headings.iter().any(|h| body.contains(h)),
+        "no craft section heading -- creators likely empty"
+    );
+}
