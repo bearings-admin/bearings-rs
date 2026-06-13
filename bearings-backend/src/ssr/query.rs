@@ -203,6 +203,9 @@ pub(crate) struct BearHistoryRow {
     pub category: Option<String>,
     pub significance: Option<String>,
     pub link: Option<String>,
+    pub id: Option<i64>,
+    pub month: Option<i32>,
+    pub featured: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -211,6 +214,8 @@ pub(crate) struct CommunityStoryRow {
     pub story_type: Option<String>,
     pub year: Option<i32>,
     pub excerpt: Option<String>,
+    pub bear_history_id: Option<i64>,
+    pub link: Option<String>,
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
