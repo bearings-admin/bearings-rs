@@ -271,7 +271,8 @@ pub(crate) async fn zone_coming_up(
             if group.is_empty() { return None; }
             let cards: String = group.iter().map(|ev| make_cu_card(ev)).collect();
             Some(format!(
-                    "<div style=\"font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:{BROWN};padding:10px 4px 4px\">{region}</div>{cards}"
+                    "<div style=\"font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:{BROWN};padding:10px 4px 4px\" id=\"cu-rg-{slug}\">{region}</div>{cards}",
+                    slug = region_slug(region)
             ))
         }).collect()
     } else {
@@ -333,6 +334,7 @@ pub(crate) async fn zone_coming_up(
         })
         .collect();
 
+    let where_map = build_where_map(&disp_events, worldwide);
     let meet_title = tl("comingup.meet_title");
     let meet_sub = tl("comingup.meet_sub");
     let body = format!(
@@ -361,9 +363,10 @@ pub(crate) async fn zone_coming_up(
         \
         <div id=\"cu-spin\" class=\"htmx-indicator\">Finding events…</div>\
         \
-        {bar}\
-        \
         <div id=\"upcoming-results\">\
+          <div style=\"font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:{MID};margin:2px 0 6px\">Where</div>\
+          {where_map}\
+          {bar}\
           {h_ev}\
           {ev_cards}\
           {empty_html}\
@@ -392,3 +395,114 @@ pub(crate) async fn zone_coming_up(
 }
 
 // ── ZONE: BEAR ARCHIVES (decade tabs) ────────────────────────
+
+fn region_slug(r: &str) -> String {
+    r.to_lowercase().replace(" & ", "-").replace(' ', "-")
+}
+
+/// Continental "Where" heat map for Coming Up: each region shaded by the number
+/// of currently-shown events. In worldwide view each region links to its group
+/// in the list below.
+fn build_where_map(events: &[EventRow], worldwide: bool) -> String {
+    let regions = [
+        (
+            "North America",
+            210,
+            105,
+            30,
+            "#8c3a10",
+            "4%",
+            "16%",
+            54,
+            46,
+        ),
+        (
+            "Latin America",
+            194,
+            96,
+            122,
+            "#7a2f45",
+            "9%",
+            "58%",
+            30,
+            38,
+        ),
+        ("Europe", 212, 160, 23, "#6b5200", "42%", "12%", 38, 32),
+        (
+            "Africa & Middle East",
+            154,
+            123,
+            181,
+            "#4a3a66",
+            "46%",
+            "50%",
+            34,
+            44,
+        ),
+        (
+            "Asia Pacific",
+            29,
+            158,
+            117,
+            "#0f6e56",
+            "73%",
+            "24%",
+            42,
+            38,
+        ),
+    ];
+    let mut counts: std::collections::HashMap<&str, i32> = std::collections::HashMap::new();
+    for e in events {
+        *counts
+            .entry(country_region(e.country.as_deref().unwrap_or("")))
+            .or_default() += 1;
+    }
+    let max = counts.values().copied().max().unwrap_or(1).max(1) as f64;
+
+    let blobs: String = regions
+        .iter()
+        .map(|(name, r, g, b, tc, left, top, w, h)| {
+            let c = *counts.get(name).unwrap_or(&0);
+            let pos = format!(
+                "position:absolute;left:{left};top:{top};width:{w}px;height:{h}px;\
+                 border-radius:46% 54% 52% 48%;display:flex;align-items:center;\
+                 justify-content:center;font-size:12px;font-weight:600;text-decoration:none"
+            );
+            if c == 0 {
+                return format!(
+                    "<div style=\"{pos};border:1px dashed rgba({r},{g},{b},.55)\"></div>"
+                );
+            }
+            let alpha = 0.25 + 0.75 * (c as f64 / max);
+            let fill = format!("background:rgba({r},{g},{b},{alpha:.2});color:{tc}");
+            if worldwide {
+                format!(
+                    "<a href=\"#cu-rg-{slug}\" style=\"{pos};{fill}\">{c}</a>",
+                    slug = region_slug(name)
+                )
+            } else {
+                format!("<div style=\"{pos};{fill}\">{c}</div>")
+            }
+        })
+        .collect();
+
+    let legend: String = regions
+        .iter()
+        .filter_map(|(name, r, g, b, ..)| {
+            if *counts.get(name).unwrap_or(&0) == 0 {
+                return None;
+            }
+            Some(format!(
+                "<span style=\"font-size:11px;color:{MID};display:inline-flex;align-items:center;gap:4px\">\
+                   <span style=\"width:9px;height:9px;border-radius:2px;background:rgb({r},{g},{b})\"></span>{name}</span>"
+            ))
+        })
+        .collect::<Vec<_>>()
+        .join("");
+
+    format!(
+        "<div style=\"position:relative;height:150px;background:#e7ddcb;border-radius:8px;\
+             overflow:hidden;margin-bottom:8px\">{blobs}</div>\
+         <div style=\"display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px\">{legend}</div>"
+    )
+}
