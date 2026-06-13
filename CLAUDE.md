@@ -96,7 +96,7 @@ SELECT
   (SELECT COUNT(*) FROM title_holders) as title_holders;
 ```
 
-**Current data (June 2026):** ~88 active events, 173 places, 49 clubs, 28 active competitions, 154 title holders, 52 bear history entries, 49 creators, 21 shops, 11 books, 13 campaigns, 35 digital spaces, 10 bear regions, ~1,190 translation rows.
+**Current data (June 2026):** ~88 active events, 173 places, 49 clubs, 28 active competitions, 153 title holders, 58 bear history entries, 49 creators, 21 shops, 11 books, 13 campaigns, 35 digital spaces, 10 bear regions, ~1,190 translation rows.
 
 **Known schema notes:**
 | Table | Note |
