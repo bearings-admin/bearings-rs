@@ -316,14 +316,15 @@ pub(crate) async fn zone_coming_up(
         </div>\
         \
         <form id=\"upcoming-filters\"\
-              hx-get=\"/?zone=coming-up\"\
+              hx-get=\"/\" action=\"/\" method=\"get\"\
               hx-target=\"#upcoming-results\"\
               hx-select=\"#upcoming-results\"\
               hx-swap=\"outerHTML\"\
-              hx-trigger=\"change from:#upcoming-filters\"\
+              hx-trigger=\"change\"\
               hx-indicator=\"#cu-spin\"\
               style=\"margin-bottom:12px\">\
           <input type=\"hidden\" name=\"lang\" value=\"{lang}\">\
+          <input type=\"hidden\" name=\"zone\" value=\"coming-up\">\
           <div style=\"display:grid;grid-template-columns:1fr 1fr;gap:8px\">\
             <select name=\"months_ahead\" style=\"{sel_style}\">{months_sel}</select>\
             <select name=\"event_country\" style=\"{sel_style}\">{country_opts}</select>\
