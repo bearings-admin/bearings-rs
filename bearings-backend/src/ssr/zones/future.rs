@@ -155,9 +155,7 @@ pub(crate) async fn zone_future(db: SupabaseClient, lang: &str) -> Response {
             </div>\
             <div style=\"border-left:3px solid {GOLD};padding-left:12px;margin:10px 0\">\
               <strong style=\"color:{BROWN}\">Middle East &amp; North Africa</strong> — \
-              Bilal Sakr (Mr Bear Montreal 2024), the first openly Middle Eastern titleholder of a major \
-              bear competition, actively fundraises for Rainbow Railroad supporting LGBTQ+ refugees \
-              from the region.\
+              Dori, a Syrian refugee resettled in Canada, was crowned Mr Ottawa Bear (2020) and champions Northern Lights Refuge, the LGBTQ+ refugee organisation that once helped him. Bilal Sakr (Mr Bear Montreal 2024) fundraises for Rainbow Railroad, which supports LGBTQ+ people fleeing the region.\
             </div>\
             <div style=\"border-left:3px solid {TAN};padding-left:12px;margin:10px 0\">\
               <strong style=\"color:{BROWN}\">Eastern Europe &amp; Central Asia</strong> — \
