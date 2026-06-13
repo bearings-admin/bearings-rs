@@ -18,4 +18,3 @@ pub mod places;
 pub mod stories; // BEAR ARCHIVES — oral histories
 pub mod submissions; // Public write — CONST-9 fallback intake
 pub mod titles;
-pub mod votes; // BEAR FUTURE — NORTH token governance voting

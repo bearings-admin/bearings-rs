@@ -162,13 +162,11 @@ When Gaspar decides:
 | Competitions | competitions (25 cols) | Active + archived support |
 | Bear history | bear_history (15 cols) | 1987-present |
 | Campaigns | campaigns (16 cols) | privacy_mode implemented |
-| NORTH token holders | governance_token_holders (17 cols) | cardano_wallet, verified, authorization_phase |
-| Community proposals | bear_future_proposals (29 cols) | Full voting scaffold: threshold, window, steward review |
-| Proposal votes | proposal_votes (7 cols) | vote_weight = NORTH balance at vote time |
+| Funding proposals | bear_future_proposals | community causes; governance/voting columns removed |
 | Treasury ledger | operational_ledger (16 cols) | authorization_phase, donor_display, donor_wallet |
 | Agent directives | documents + document_archive | v0.7 live, v0.1-v0.6 archived |
 | Agent code storage | code (10 cols) | Full bearings-rs workspace |
-| Platform config | platform_settings | treasury_phase, bear_future_active, NORTH metadata |
+| Platform config | platform_settings | bear_future_active, lights_wallet_* (Base/USDC) |
 
 ### ✅ In database, NOT in white paper (DB ahead of plan)
 
@@ -228,7 +226,6 @@ InclusionFlag, Media.
 | GET /api/stories | stories | BEAR ARCHIVES oral histories |
 | GET /api/stores | stores | Utility |
 | GET /api/media | media | BEAR ARCHIVES creator zone |
-| POST /api/votes | proposal_votes | BEAR FUTURE |
 | GET /api/events/with-flags | events + inclusion_flags | CONST-10 |
 | GET /api/agent/posts | agent_posts | Bluesky pipeline |
 | GET /api/agent/inbox | agent_inbox | Bluesky pipeline |
@@ -263,7 +260,7 @@ doing this better. The Rust route should query the view, not the raw table.
 
 ### Fixed this session
 - RLS enabled on: operational_ledger, bear_future_proposals,
-  governance_token_holders, proposal_votes, documents, code, document_archive
+  documents, code, document_archive
 - Public read policy on all — service role writes only
 - bear_history RLS policy gap filled
 
@@ -323,10 +320,9 @@ How much of each zone is covered by current Rust routes:
    Add ai_place_summary, ai_title_summary, ai_campaign_summary.
    This makes Bearings dramatically more useful to AI assistants.
 
-2. **POST /api/votes** — The voting infrastructure exists (proposal_votes table,
-   vote_weight = token_balance) but the Rust endpoint doesn't. Bear Future
-   is described as governance-capable in the white paper. Without this route
-   it's read-only.
+2. **Governance is deferred** — there is no token and no voting endpoint, by design.
+   If Bearings ever needs community control the mechanism (possibly a DAO) is chosen
+   then, against whatever the landscape looks like. See WHITE_PAPER §3.
 
 3. **stories route** — GET /api/stories. Oral histories. Empty table but the
    white paper explicitly promises this. Stories table schema is ready.

@@ -41,7 +41,7 @@ A verified living directory of bear events, places, clubs, title holders, creato
 bearings-rs/
   bearings-backend/     — Axum SSR + REST API (the live server)
   bearings-shared/      — shared typed models (used by backend + agent)
-  bearings-agent/       — treasury monitor, Blockfrost, Bluesky stub
+  bearings-agent/       — research + Bluesky publishing scaffold (manual treasury)
   bearings-frontend/    — Leptos 0.6 skeleton (Phase 3, not yet active)
 ```
 
@@ -151,8 +151,8 @@ Gaspar's primary work will be the Leptos frontend (`bearings-frontend`). The Axu
 | Mr Bear Europe 2026 winner | Competition: Lisbon, July 15–19 2026 — update `title_holders` after crowning |
 | Mr TBRU 1995–2026 | Outreach: contest@tbru.org |
 | NAB Weekend gaps | 2012–2014 names, 2017 name — contact: nabweekend@gmail.com |
-| Governance model | For-profit vs community infrastructure — Gaspar + steward decision pending |
-| Cardano treasury / NORTH token | Deferred until governance model decided |
+| Governance model | Deferred to the future — possibly a DAO; revisit if Bearings outgrows the founding steward |
+| Base/USDC lights wallet | Steward to create the wallet + set `lights_wallet_*` in platform_settings |
 | `bearings-frontend` Phase 3 | Wire Supabase client into Leptos server functions |
 | Nightly research cron | Replace manual inserts with systemd timer + Eventbrite/iCal APIs |
 

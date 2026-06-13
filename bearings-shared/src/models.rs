@@ -189,26 +189,19 @@ pub struct BearFutureProposal {
     pub title: String,       // NOT NULL
     pub description: String, // NOT NULL
     pub cause_category: Option<String>,
-    pub target_amount_ada: f64, // NOT NULL
+    pub target_amount_usdc: f64, // NOT NULL
     pub target_amount_usd: Option<f64>,
-    pub raised_ada: Option<f64>,
+    pub raised_usdc: Option<f64>,
     pub receiving_wallet: Option<String>,
     pub applicant_name: Option<String>,
     pub applicant_email: Option<String>,
     pub applicant_club_id: Option<i64>,
     pub supporting_link: Option<String>,
-    pub vote_yes: Option<i32>,
-    pub vote_no: Option<i32>,
-    pub vote_threshold_pct: Option<i32>, // defaults to 60 (operational) or 75 (constitutional)
-    pub vote_min_count: Option<i32>,     // minimum NORTH votes required
-    pub voting_opens_at: Option<DateTime<Utc>>,
-    pub voting_closes_at: Option<DateTime<Utc>>,
     pub status: Option<String>, // draft | open | passed | failed | funded
     pub funded_at: Option<DateTime<Utc>>,
     pub tx_hash: Option<String>, // on-chain proof when funded
     pub privacy_mode: Option<bool>,
     pub urgent: Option<bool>,
-    pub governance_ready: Option<bool>,
     pub active: Option<bool>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
@@ -216,31 +209,7 @@ pub struct BearFutureProposal {
     pub steward_notes: Option<String>,
 }
 
-/// A NORTH token holder — verified bear community contributor.
-/// Schema source: governance_token_holders table (verified 2026-06-06)
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct GovernanceTokenHolder {
-    #[serde(skip_serializing_if = "is_zero_id")]
-    pub id: i64,
-    pub display_name: String,           // NOT NULL in DB
-    pub cardano_wallet: Option<String>, // single wallet field (not custodial/self_custody)
-    pub user_pref_id: Option<i64>,      // FK to user_preferences
-    pub contributor_tier: String, // NOT NULL: anonymous|community|verified_contributor|club_officer|steward
-    pub verified_role_description: Option<String>,
-    pub title_holder_id: Option<i64>, // FK to title_holders (if verified via competition)
-    pub club_id: Option<i64>,         // FK to clubs (if verified via club officer role)
-    pub token_balance: Option<i32>,   // NORTH token count = voting weight (default 1)
-    pub proposals_voted: Option<i32>,
-    pub proposals_passed: Option<i32>,
-    pub verified: Option<bool>,
-    pub verified_at: Option<DateTime<Utc>>,
-    pub verified_by: Option<String>, // default: "steward"
-    pub active: Option<bool>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub authorization_phase: Option<i32>,
-}
-
-/// An operational ledger entry — every ADA movement logged.
+/// An operational ledger entry — every USDC movement logged.
 /// Schema source: operational_ledger table (verified 2026-06-06)
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OperationalLedger {
@@ -249,7 +218,7 @@ pub struct OperationalLedger {
     pub tx_hash: Option<String>,
     pub tx_date: Option<chrono::NaiveDate>, // DB type is date, not timestamptz
     pub direction: String,                  // NOT NULL in DB: "in" | "out"
-    pub amount_ada: Option<f64>,
+    pub amount_usdc: Option<f64>,
     pub amount_usd: Option<f64>,
     pub vendor: Option<String>,
     pub description: Option<String>,
@@ -364,28 +333,16 @@ impl TitleHolder {
 }
 
 impl OperationalLedger {
-    /// Format the ADA amount with sign: "+2.50 ADA" or "-1.20 ADA"
+    /// Format the USDC amount with sign: "+2.50 USDC" or "-1.20 USDC"
     pub fn amount_display(&self) -> String {
-        let ada = self.amount_ada.unwrap_or(0.0);
+        let usdc = self.amount_usdc.unwrap_or(0.0);
         // direction is String (NOT NULL), not Option<String>
         let sign = match self.direction.as_str() {
             "in" => "+",
             "out" => "-",
             _ => "",
         };
-        format!("{}{:.2} ADA", sign, ada.abs())
-    }
-}
-
-impl GovernanceTokenHolder {
-    /// Voting weight = token_balance (NORTH tokens held)
-    pub fn voting_weight(&self) -> i32 {
-        self.token_balance.unwrap_or(0)
-    }
-
-    /// Resolved display name — falls back to "Anonymous Contributor"
-    pub fn resolved_name(&self) -> &str {
-        self.display_name.as_str()
+        format!("{}{:.2} USDC", sign, usdc.abs())
     }
 }
 
@@ -448,20 +405,6 @@ pub struct AgentPost {
     pub notes: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
-}
-
-/// A governance vote cast by a NORTH token holder.
-/// proposal_id + voter_id must be unique — one vote per holder per proposal.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ProposalVote {
-    #[serde(skip_serializing_if = "is_zero_id")]
-    pub id: i64,
-    pub proposal_id: i64,
-    pub voter_id: i64,            // FK to governance_token_holders
-    pub vote: String,             // "yes" | "no" | "abstain"
-    pub vote_weight: Option<i32>, // = voter's token_balance at time of vote
-    pub voted_at: Option<DateTime<Utc>>,
-    pub notes: Option<String>,
 }
 
 /// An inclusion flag — codes used to tag events/places that may exclude certain groups.

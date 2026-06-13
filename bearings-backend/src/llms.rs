@@ -47,8 +47,8 @@ GET /api/digital-spaces    — apps, Discord, podcasts (?space_type=discord)
 GET /api/stories           — oral histories and community essays
 GET /api/bear-history      — community milestones 1987–present
 GET /api/campaigns         — active charity campaigns
-GET /api/treasury          — community treasury status (planned, not yet funded)
-GET /api/bear-future       — community governance proposals
+GET /api/treasury          — the Base/USDC wallet that keeps the lights on
+GET /api/bear-future       — community funding proposals
 GET /api/inclusion-flags   — CONST-10 inclusion flag reference
 
 ## MCP server (for AI agents)
@@ -58,7 +58,7 @@ Tools: search_events, list_places, current_title_holders, list_clubs, list_creat
 list_campaigns, list_digital_spaces.
 
 ## Governance
-Community-governed. Token: NORTH (Cardano). 100 verified holders = full DAO.
+Run by a volunteer steward and kept transparent. Formal governance is deferred to the future — if Bearings outgrows a single steward, a community model (possibly a DAO) can be introduced then.
 Legal: unincorporated association. Contact: ursasteward@pm.me
 "#;
 

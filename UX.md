@@ -110,8 +110,8 @@ deep. Not filtered by proximity.
 ### BEAR FUTURE
 **Lens: Global + Forward**
 
-Governance doesn't need a location filter either. NORTH token proposals
-are community-wide. The treasury is global. The only time location matters
+Governance doesn't need a location filter either. Funding proposals are
+community-wide and the treasury is global. The only time location matters
 here is for proposal beneficiaries (e.g. "senior bear programme in Ottawa").
 
 ---

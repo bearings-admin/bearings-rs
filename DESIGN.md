@@ -70,7 +70,7 @@ NOW
   ├── Timeline bar chart (event density by month, scrollable horizontal)
   ├── Stat row (121 events / 170 places / 49 clubs / 87 title holders)
   ├── Quick card scroller (swipeable: title, this week, campaign, run, cruise)
-  └── Treasury block (community ADA + operational ADA, bear flag stripe top)
+  └── Treasury block (Base/USDC lights wallet balance, bear flag stripe top)
 
 COMING UP
   ├── Event list (filterable by continent, type, month)
@@ -83,10 +83,9 @@ BEAR ARCHIVES
   └── Oral histories (stories table — currently empty, needs content)
 
 BEAR FUTURE
-  ├── The Pot (treasury_balance_ada, operational_balance_ada, NORTH count)
-  ├── Active proposals (vote_yes / vote_no / progress bar)
-  ├── Funded (tx_hash links to Cardanoscan)
-  └── Operational ledger (every ADA movement, public on-chain transparency)
+  ├── Funding proposals (community causes, progress bar)
+  ├── Funded (tx_hash links to a Base block explorer)
+  └── Operational ledger (every USDC movement, public on-chain transparency)
 ```
 
 ---
@@ -113,12 +112,10 @@ tells you everywhere that breaks. All structs have `#[derive(Default)]`.
 - Privacy middleware (CONST-6) — centralised in middleware.rs
 - Config validated at startup in config.rs
 
-**bearings-agent** is the treasury monitor + governance agent.
-- Hourly: check both Cardano wallets for new inbound transactions
-- Monday 03:00 UTC: update treasury balance snapshot in platform_settings
-- NORTH token minting — Phase 1 manual, Phase 4 autonomous
-- Embedded wallet onboarding — email-only, custodial → self-custody exit
-- x402 payments — Phase 4 ONLY, guarded by check_phase_before_payment()
+**bearings-agent** is the research + Bluesky publishing scaffold.
+- The treasury is a single Base/USDC wallet the steward funds and spends manually, so
+  there is no autonomous on-chain monitor.
+- Bluesky posts always require steward review (CONST-10) — the agent drafts, never posts.
 - NEVER holds private keys
 
 ---
@@ -159,55 +156,24 @@ Source: ILGA World annual report, updated annually.
 Strategy: use enums for validation in new code, convert models.rs in Phase 2.
 Gaspar should weigh in on approach.
 
-### 7. Blockfrost via REST not crate
-`blockfrost-rs` requires nightly. We call the REST API directly.
-`net_received()` handles change outputs correctly.
-`headers()` rebuilds HeaderMap per call — cheap, acceptable.
+## Treasury
 
-### 8. x402 payments are Phase 4 ONLY
-`check_phase_before_payment()` reads `treasury_phase` from platform_settings
-and returns Err if < 4. Called at top of every payment function.
-Community treasury NEVER touched by autonomous agent — constitutional.
+A single self-custodial **Base/USDC** wallet keeps the lights on. The steward tops it
+up and pays infrastructure invoices manually, one at a time; the agent never holds
+keys. Balance, chain, and address live in `platform_settings` (`lights_wallet_*`) and
+surface on the Transparency zone. When a second steward joins, the runway can move to a
+**Safe** multi-sig (CONST-2). Every movement is recorded in `operational_ledger` (USDC).
 
 ---
 
-## NORTH Token
+## Governance (deferred)
 
-**Name:** NORTH
-**Metaphor:** Compass bearings measured relative to magnetic north.
-More NORTH = more sway. Follow the NORTH.
-**Chain:** Cardano native asset
-**Distribution:** 1 per verified role (title holder, club officer, etc.)
-**Non-transferable** during bootstrapping
-**DAO threshold:** 100 verified holders unlocks full governance
-**Current holders:** 0
-
-**Minting flow (Phase 1):**
-1. Bear submits claimed role via web form
-2. `log_mint_request()` creates unverified row in governance_token_holders
-3. Steward reviews against public records (BWM, competition archive)
-4. `confirm_mint()` sets verified=true, token_balance=1
-5. Bear receives email: you can now vote
-
-**Wallet onboarding:**
-- Email only — no crypto knowledge needed
-- Custodial wallet placeholder created in Phase 1
-- Bear can connect Eternl/Lace for self-custody exit
-- `wallet_type`: "custodial" | "self-custody" | "both"
-
----
-
-## Treasury Phases
-
-| Phase | Model | Status |
-|-------|-------|--------|
-| 1 | Steward holds keys, manual | **Current** |
-| 2 | Multi-sig 2-of-3 elected keyholders | Next milestone |
-| 3 | NORTH vote triggers release, steward executes | Post-bootstrapping |
-| 4 | Agent autonomous via x402 Protocol | Long-term |
-
-`treasury_phase` in platform_settings controls which phase is active.
-Advancing requires a governance vote.
+Governance is intentionally not built yet. If Bearings ever needs to outlive its
+founding steward, or grows large enough to need shared control, control moves to the
+community then. A DAO is one plausible model — but the tooling and the wider
+crypto/agent landscape will have changed by the time it is needed, so the mechanism is
+left open rather than specified now. There is no token. Community voice today is via
+submission and discussion.
 
 ---
 
@@ -238,10 +204,6 @@ Priority order:
 
 2. `bearings-shared/src/models.rs`
    - Are Option<> wrappers appropriate for nullable columns?
-   - Should ADA amounts be f64 or u64 lovelace with conversion?
-
-3. `bearings-agent/src/blockfrost.rs`
-   - Is net_received() correct for complex transactions?
 
 4. `bearings-shared/src/enums.rs`
    - Should models use enums or raw String? What is the Rust idiom here?
@@ -249,16 +211,13 @@ Priority order:
 5. `bearings-backend/src/db.rs`
    - Is storing reqwest::Client on the Axum State correct?
 
-6. `bearings-agent/src/treasury.rs`
-   - Any concerns about the hourly loop structure?
-
 ---
 
 ## Pending Human Actions (before GitHub)
 
-1. **Create TWO Cardano wallets** (Eternl or Lace)
-   Set treasury_wallet_ada and operational_wallet_ada in platform_settings
-   Unlocks: Bear Future zone, treasury display
+1. **Create the Base/USDC "lights" wallet** (any self-custodial signer wallet)
+   Set lights_wallet_address / lights_wallet_chain / lights_wallet_balance_usd in platform_settings
+   Unlocks: treasury display on the Transparency zone
 
 2. **Create bearings-rs GitHub repo** (public, bearings-admin/bearings-rs)
    Paste files from code table into repo

@@ -64,14 +64,15 @@ This decision gates the governance architecture.
   grants, and minimal affiliate income. Lightweight governance: the steward makes
   operational decisions; the community has voice via submission and discussion. No
   token required.
-- **Path B — community-owned platform.** A NORTH token on Cardano supports community
-  voting — one per verified role (former title holder, club officer, organiser),
-  non-transferable during bootstrapping, with a 100-verified-holder threshold to
-  unlock DAO governance (60% operational / 75% constitutional).
+- **Path B — community-owned governance.** If Bearings ever needs to outlive its
+  founding steward, or grows large enough to need shared control, governance moves to
+  the community then. The mechanism is deliberately left open — a DAO is one plausible
+  model, but the tooling and the wider crypto/agent landscape will have changed by the
+  time it is needed, so it is deferred rather than specified now. No token is involved;
+  community voice today is via submission and discussion.
 
-**Current default is Path A** until decided. The token/treasury machinery described
-below is exploratory architecture, not a commitment — it can be activated under Path B
-without disrupting operations.
+**Current default is Path A.** The optional Path B governance above is deferred future
+work, not a commitment, and can be introduced later without disrupting operations.
 
 ---
 
@@ -99,9 +100,9 @@ from CONST-2 (no single point of human failure):
   the ledger is the record, the wallet is the proof.
 - **The agent never holds private keys.** Payments are manual and steward-authorised.
 
-The Cardano two-wallet model and the NORTH governance token remain the **Path B**
-option (§3), activatable later without disrupting this setup. Auto-renewing crypto
-payments would need a crypto debit card and are out of scope for now.
+Community governance (§3) remains a deferred Path B option and is independent of this
+wallet setup. Auto-renewing crypto payments would need a crypto debit card and are out
+of scope for now.
 
 ---
 

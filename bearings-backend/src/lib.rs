@@ -84,10 +84,6 @@ pub fn build_app(db: db::SupabaseClient) -> Router {
         .route("/api/treasury", get(routes::bear_future::treasury))
         .route("/api/bear-future", get(routes::bear_future::proposals))
         .route("/api/bear-future/funded", get(routes::bear_future::funded))
-        .route(
-            "/api/bear-future/token-holders",
-            get(routes::bear_future::token_holders),
-        )
         .route("/api/bear-future/ledger", get(routes::bear_future::ledger))
         // ── Creators API ────────────────────────────────────────
         .route("/api/creators", get(routes::creators::list))
@@ -104,8 +100,6 @@ pub fn build_app(db: db::SupabaseClient) -> Router {
         // ── Inclusion flags API ─────────────────────────────────
         .route("/api/inclusion-flags", get(routes::flags::list_flags))
         .route("/api/events/flagged", get(routes::flags::flagged_events))
-        // ── Governance voting ───────────────────────────────────
-        .route("/api/bear-future/vote", post(routes::votes::cast))
         // ── iCal export ─────────────────────────────────────────
         .route("/api/events/ical.ics", get(routes::ical::export))
         .route(

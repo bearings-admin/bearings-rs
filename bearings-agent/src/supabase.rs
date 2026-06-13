@@ -63,7 +63,7 @@ impl SupabaseWriter {
     }
 
     /// PATCH (partial update) at a filtered path.
-    /// path example: "governance_token_holders?id=eq.42"
+    /// path example: "events?id=eq.42"
     pub async fn patch<B: Serialize>(&self, path: &str, body: &B) -> Result<(), AgentError> {
         self.request(reqwest::Method::PATCH, path)
             .json(body)

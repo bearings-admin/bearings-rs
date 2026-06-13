@@ -1,11 +1,12 @@
-//! Bear Future — governance and treasury read endpoints.
+//! Bear Future — funding-proposal and treasury read endpoints.
 //! Data access in `repositories::bear_future_repo`; this layer maps HTTP <-> repo
 //! and applies privacy redaction (CONST-6) before responding.
 
 use crate::db::SupabaseClient;
 use crate::error::AppError;
-use crate::repositories::bear_future_repo::{
-    BearFutureRepository, PublicTokenHolder, SupabaseBearFutureRepository,
+use crate::repositories::bear_future_repo::{BearFutureRepository, SupabaseBearFutureRepository};
+use crate::repositories::transparency_repo::{
+    SupabaseTransparencyRepository, TransparencyRepository,
 };
 use axum::{
     extract::{Query, State},
@@ -14,41 +15,24 @@ use axum::{
 use bearings_shared::models::{BearFutureProposal, OperationalLedger};
 use serde::{Deserialize, Serialize};
 
-/// Treasury summary for the Bear Future "The Pot" section.
+/// The public Base/USDC wallet that keeps the lights on (manual, steward-run).
 #[derive(Serialize)]
 pub struct TreasurySummary {
-    pub community_treasury_ada: f64,
-    pub operational_wallet_ada: f64,
-    pub governance_token_total_minted: i64,
-    pub treasury_phase: i32,
-    pub community_wallet_address: Option<String>,
-    pub operational_wallet_address: Option<String>,
-    pub bear_future_active: bool,
+    pub lights_wallet_balance_usd: f64,
+    pub lights_wallet_address: Option<String>,
+    pub lights_wallet_chain: String,
+    pub lights_wallet_updated: Option<String>,
 }
 
-/// GET /api/treasury — live treasury balances from platform_settings.
+/// GET /api/treasury — the Base/USDC "keep the lights on" wallet.
 pub async fn treasury(State(db): State<SupabaseClient>) -> Result<Json<TreasurySummary>, AppError> {
-    let repo = SupabaseBearFutureRepository::new(db);
-    let s = repo.treasury_settings().await?;
-    let num = |k: &str, default: f64| s.get(k).and_then(|v| v.parse().ok()).unwrap_or(default);
-
+    let repo = SupabaseTransparencyRepository::new(db);
+    let w = repo.wallet().await?;
     Ok(Json(TreasurySummary {
-        community_treasury_ada: num("treasury_balance_ada", 0.0),
-        operational_wallet_ada: num("operational_balance_ada", 0.0),
-        governance_token_total_minted: s
-            .get("governance_token_total_minted")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0),
-        treasury_phase: s
-            .get("treasury_phase")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(1),
-        community_wallet_address: s.get("treasury_wallet_ada").cloned(),
-        operational_wallet_address: s.get("operational_wallet_ada").cloned(),
-        bear_future_active: s
-            .get("bear_future_active")
-            .map(|v| v == "true")
-            .unwrap_or(false),
+        lights_wallet_balance_usd: w.balance_usd,
+        lights_wallet_address: (!w.address.is_empty()).then_some(w.address),
+        lights_wallet_chain: w.chain,
+        lights_wallet_updated: (!w.updated.is_empty()).then_some(w.updated),
     }))
 }
 
@@ -86,14 +70,6 @@ pub async fn funded(
 ) -> Result<Json<Vec<BearFutureProposal>>, AppError> {
     let repo = SupabaseBearFutureRepository::new(db);
     Ok(Json(repo.funded_proposals().await?))
-}
-
-/// GET /api/bear-future/token-holders — verified NORTH holders (no wallets).
-pub async fn token_holders(
-    State(db): State<SupabaseClient>,
-) -> Result<Json<Vec<PublicTokenHolder>>, AppError> {
-    let repo = SupabaseBearFutureRepository::new(db);
-    Ok(Json(repo.token_holders().await?))
 }
 
 #[derive(Deserialize)]
