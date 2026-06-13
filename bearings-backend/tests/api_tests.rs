@@ -188,3 +188,29 @@ async fn mcp_initialize_and_tools_list() {
         "expected >=5 MCP tools",
     );
 }
+
+// -- Render guards --------------------------------------------------------------
+
+/// A DB-backed zone should not come back suspiciously empty. Guards the
+/// "deserialize error -> or_log -> empty Vec -> blank UI" class of bug (the Places
+/// counts/dropdown regression), which a status-200 + "BEARINGS" check misses.
+#[tokio::test]
+async fn places_zone_renders_regions_and_counts() {
+    let Some(server) = live_server() else {
+        return;
+    };
+    let resp = server.get("/?zone=places").await;
+    resp.assert_status_ok();
+    let body = resp.text();
+    // The tiered country dropdown only emits <optgroup> when the all-places query
+    // deserialized into a non-empty Vec; an empty Vec produces no optgroups.
+    assert!(
+        body.contains("<optgroup"),
+        "no region optgroups -- all_places likely empty"
+    );
+    // Zero-count type tiles are hidden, so a named tile proves a real, non-zero count.
+    assert!(
+        body.contains("Sauna"),
+        "Sauna type tile missing -- counts likely zeroed"
+    );
+}
