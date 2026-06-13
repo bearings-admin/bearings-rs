@@ -98,11 +98,11 @@ pub(crate) fn shell(
     };
     let dir_links: String = [
         ("places", "🍺", "nav.places"),
+        ("digital-spaces", "📱", "nav.digital"),
         ("clubs", "🏳\u{fe0f}", "nav.clubs"),
+        ("titles", "🏆", "nav.titles"),
         ("creators", "🎨", "nav.creators"),
         ("shops", "\u{1f6cd}\u{fe0f}", "nav.shops"),
-        ("titles", "🏆", "nav.titles"),
-        ("digital-spaces", "📱", "nav.digital"),
     ]
     .iter()
     .map(|&(z, i, k)| drawer_link(z, i, k))
