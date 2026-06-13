@@ -17,6 +17,7 @@ pub(crate) async fn zone_coming_up(
     lang: &str,
 ) -> Response {
     let country = event_country.as_deref().unwrap_or("");
+    let tl = |k: &str| crate::i18n::t(crate::i18n::translations(), lang, k);
 
     // Compute the date window from the selected "when" value. Most options are a
     // cumulative "today -> today + N months" range, but two are fixed windows that
@@ -97,18 +98,18 @@ pub(crate) async fn zone_coming_up(
                      font-size:13px;color:{DARK};font-family:inherit";
 
     let months_opts: &[(u32, &str)] = &[
-        (1, "Next month"),
-        (2, "Next 2 months"),
-        (3, "Next 3 months"),
-        (6, "Next 6 months"),
-        (612, "6 months to a year"),
-        (999, "Next year"),
+        (1, "comingup.when.1"),
+        (2, "comingup.when.2"),
+        (3, "comingup.when.3"),
+        (6, "comingup.when.6"),
+        (612, "comingup.when.6to12"),
+        (999, "comingup.when.year"),
     ];
     let months_sel: String = months_opts
         .iter()
         .map(|(v, l)| {
             let sel = if *v == sel_val { " selected" } else { "" };
-            format!("<option value=\"{v}\"{sel}>{l}</option>")
+            format!("<option value=\"{v}\"{sel}>{}</option>", tl(l))
         })
         .collect();
 
@@ -168,8 +169,8 @@ pub(crate) async fn zone_coming_up(
     let month_label = months_opts
         .iter()
         .find(|(v, _)| *v == sel_val)
-        .map(|(_, l)| *l)
-        .unwrap_or("6 months");
+        .map(|(_, l)| tl(l))
+        .unwrap_or_else(|| tl("comingup.when.6"));
 
     // ── Monthly bar chart + optional month filter ───────────────
     let country_enc = if country.is_empty() {
@@ -332,11 +333,13 @@ pub(crate) async fn zone_coming_up(
         })
         .collect();
 
+    let meet_title = tl("comingup.meet_title");
+    let meet_sub = tl("comingup.meet_sub");
     let body = format!(
         "<div style=\"text-align:center;padding:20px 0 12px\">\
           <h1 style=\"font-size:22px;font-weight:700;color:{BROWN};line-height:1.2;\
-                      margin-bottom:6px\">When &amp; Where<br>\
-            <span style=\"font-size:15px;font-weight:400;color:{MID}\">do you want to meet?</span>\
+                      margin-bottom:6px\">{meet_title}<br>\
+            <span style=\"font-size:15px;font-weight:400;color:{MID}\">{meet_sub}</span>\
           </h1>\
         </div>\
         \

@@ -59,6 +59,8 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
         }
     }
 
+    let tl = |k: &str| crate::i18n::t(crate::i18n::translations(), lang, k);
+
     // Scope order and icons
     let scope_order = [
         "international",
@@ -87,14 +89,14 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
             continue;
         }
 
-        let scope_label = match scope {
-            "international" => "International",
-            "continental" => "Continental",
-            "national" => "National",
-            "regional" => "Regional",
-            "local" => "Local",
+        let scope_label = tl(match scope {
+            "international" => "titles.scope.international",
+            "continental" => "titles.scope.continental",
+            "national" => "titles.scope.national",
+            "regional" => "titles.scope.regional",
+            "local" => "titles.scope.local",
             _ => scope,
-        };
+        });
         sections.push_str(&format!(
             "<div style=\"font-size:10px;font-weight:700;text-transform:uppercase;\
               letter-spacing:.1em;color:{MID};margin:16px 0 6px\">{scope_label}</div>"
