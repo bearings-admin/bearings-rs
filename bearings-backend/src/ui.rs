@@ -166,7 +166,7 @@ text-transform:uppercase;color:{MID};margin-bottom:4px\">{nav_sup}</div>\n\
     {support_links}\n\
   </div>\n\
 \n\
-  <header style=\"max-width:640px;margin:0 auto;padding:10px 16px 8px\">\n\
+  <header style=\"max-width:640px;margin:0 auto;padding:10px 16px 8px;position:sticky;top:0;z-index:90;background:{OFF_WHITE};border-bottom:1px solid {TAN}\">\n\
     <div style=\"display:flex;justify-content:space-between;align-items:center\">\n\
       <a href=\"/?zone=coming-up&lang={lang}\" style=\"display:flex;align-items:baseline;gap:8px\">\n\
         <span style=\"font-size:18px;font-weight:700;letter-spacing:.15em;\
