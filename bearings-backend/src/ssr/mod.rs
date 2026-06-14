@@ -106,7 +106,7 @@ pub async fn root(State(db): State<SupabaseClient>, Query(q): Query<ZoneQuery>) 
         Some("ja") => "ja",
         _ => "en",
     };
-    match Zone::parse(q.zone.as_deref().unwrap_or("now")) {
+    match Zone::parse(q.zone.as_deref().unwrap_or("coming-up")) {
         Zone::Now => zone_now(db, lang_owned).await,
         Zone::ComingUp => {
             zone_coming_up(
