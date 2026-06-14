@@ -94,7 +94,12 @@ pub(crate) async fn zone_transparency(db: SupabaseClient, lang: &str) -> Respons
         </div>\
         <p style=\"font-size:11px;color:{MID};margin-top:14px;line-height:1.5\">\
           SSL is free (Let\u{2019}s Encrypt, auto-renewing). The project takes no profit \u{2014} any \
-          surplus stays in the wallet as runway. Anyone can verify the balance on the explorer above.</p>",
+          surplus stays in the wallet as runway. Anyone can verify the balance on the explorer above.</p>\
+        <p style=\"font-size:11px;color:{MID};margin-top:10px;line-height:1.5\">\
+          World map: <a href=\"https://github.com/flekschas/simple-world-map\" target=\"_blank\" \
+            style=\"color:{ORANGE}\">simple-world-map</a> by Al MacDonald / Fritz Lekschas, \
+          <a href=\"https://creativecommons.org/licenses/by-sa/3.0/\" target=\"_blank\" \
+            style=\"color:{ORANGE}\">CC BY-SA 3.0</a>.</p>",
         budget_h = sh("What it costs", None),
         wallet_h = sh("Keep-the-lights-on wallet", None),
         burn = monthly_burn, bal = wallet.balance_usd,

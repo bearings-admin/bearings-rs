@@ -400,58 +400,51 @@ fn region_slug(r: &str) -> String {
     r.to_lowercase().replace(" & ", "-").replace(' ', "-")
 }
 
-/// Continental "Where" heat map for Coming Up: each region shaded by the number
-/// of currently-shown events. In worldwide view each region links to its group
-/// in the list below.
+/// Continental "Where" heat map for Coming Up, rendered on a real world map
+/// (country shapes coloured by region). Geometry is a static asset; colours are
+/// computed from the currently-shown events. Map source: flekschas/simple-world-map
+/// (CC BY-SA 3.0, Al MacDonald / Fritz Lekschas).
 fn build_where_map(events: &[EventRow], worldwide: bool) -> String {
-    let regions = [
+    const INNER: &str = include_str!("world_inner.svg");
+    const VIEWBOX: &str = "30.767 241.591 784.077 458.627";
+    let regions: [(&str, &str, &[&str]); 5] = [
+        ("North America", "210,105,30", &["us", "ca", "mx", "pr"]),
         (
-            "North America",
-            210,
-            105,
-            30,
-            "#8c3a10",
-            "4%",
-            "16%",
-            54,
-            46,
-        ),
-        (
-            "Latin America",
-            194,
-            96,
-            122,
-            "#7a2f45",
-            "9%",
-            "58%",
-            30,
-            38,
-        ),
-        ("Europe", 212, 160, 23, "#6b5200", "42%", "12%", 38, 32),
-        (
-            "Africa & Middle East",
-            154,
-            123,
-            181,
-            "#4a3a66",
-            "46%",
-            "50%",
-            34,
-            44,
+            "Europe",
+            "212,160,23",
+            &[
+                "be", "cz", "ee", "fr", "de", "is", "ie", "it", "lu", "nl", "no", "pl", "pt", "gb",
+                "es", "se", "ch", "at", "dk", "fi", "gr", "hu", "ro", "rs", "hr", "sk", "si", "ba",
+                "bg", "al", "lt", "lv", "ua", "by", "md", "mk",
+            ],
         ),
         (
             "Asia Pacific",
-            29,
-            158,
-            117,
-            "#0f6e56",
-            "73%",
-            "24%",
-            42,
-            38,
+            "29,158,117",
+            &[
+                "au", "jp", "my", "nz", "ph", "sg", "kr", "tw", "th", "id", "vn", "kh", "la", "mm",
+                "np", "lk", "kp", "mn", "bd", "bt", "bn",
+            ],
+        ),
+        (
+            "Latin America",
+            "194,96,122",
+            &[
+                "ar", "br", "cl", "co", "uy", "pe", "ve", "ec", "bo", "py", "gy", "sr", "gf", "pa",
+                "cr", "ni", "hn", "gt", "sv", "bz", "cu", "do", "ht",
+            ],
+        ),
+        (
+            "Africa & Middle East",
+            "154,123,181",
+            &[
+                "eg", "il", "ma", "za", "ae", "dz", "ly", "sd", "et", "ke", "ng", "tz", "cd", "ao",
+                "mz", "na", "sa", "iq", "ir", "tr", "sy", "jo", "ye", "om", "tn", "gh", "ml", "ne",
+                "td", "cm", "so", "zm", "zw", "bw", "mg", "ug", "sn", "cf", "cg", "mr", "bf",
+            ],
         ),
     ];
-    let mut counts: std::collections::HashMap<&str, i32> = std::collections::HashMap::new();
+    let mut counts: HashMap<&str, i32> = HashMap::new();
     for e in events {
         *counts
             .entry(country_region(e.country.as_deref().unwrap_or("")))
@@ -459,50 +452,54 @@ fn build_where_map(events: &[EventRow], worldwide: bool) -> String {
     }
     let max = counts.values().copied().max().unwrap_or(1).max(1) as f64;
 
-    let blobs: String = regions
-        .iter()
-        .map(|(name, r, g, b, tc, left, top, w, h)| {
-            let c = *counts.get(name).unwrap_or(&0);
-            let pos = format!(
-                "position:absolute;left:{left};top:{top};width:{w}px;height:{h}px;\
-                 border-radius:46% 54% 52% 48%;display:flex;align-items:center;\
-                 justify-content:center;font-size:12px;font-weight:600;text-decoration:none"
-            );
-            if c == 0 {
-                return format!(
-                    "<div style=\"{pos};border:1px dashed rgba({r},{g},{b},.55)\"></div>"
-                );
-            }
-            let alpha = 0.25 + 0.75 * (c as f64 / max);
-            let fill = format!("background:rgba({r},{g},{b},{alpha:.2});color:{tc}");
-            if worldwide {
-                format!(
-                    "<a href=\"#cu-rg-{slug}\" style=\"{pos};{fill}\">{c}</a>",
-                    slug = region_slug(name)
-                )
-            } else {
-                format!("<div style=\"{pos};{fill}\">{c}</div>")
-            }
-        })
-        .collect();
+    let mut css = String::from("#cuwm path{fill:#d8ccb5;stroke:none}");
+    for (name, rgb, isos) in &regions {
+        let c = *counts.get(name).unwrap_or(&0);
+        let alpha = if c == 0 {
+            0.14
+        } else {
+            0.25 + 0.75 * (c as f64 / max)
+        };
+        let sels: Vec<String> = isos
+            .iter()
+            .flat_map(|i| [format!("#cuwm #{i}"), format!("#cuwm #{i} path")])
+            .collect();
+        css.push_str(&format!(
+            "{}{{fill:rgba({rgb},{alpha:.2})}}",
+            sels.join(",")
+        ));
+    }
 
     let legend: String = regions
         .iter()
-        .filter_map(|(name, r, g, b, ..)| {
-            if *counts.get(name).unwrap_or(&0) == 0 {
-                return None;
+        .map(|(name, rgb, _)| {
+            let c = *counts.get(name).unwrap_or(&0);
+            let sw = format!(
+                "<span style=\"display:inline-block;width:11px;height:11px;border-radius:2px;\
+                 background:rgb({rgb});vertical-align:-1px;margin-right:5px\"></span>"
+            );
+            let label = if c == 0 {
+                format!("{name} &middot; soon")
+            } else {
+                format!("{name} {c}")
+            };
+            if worldwide && c > 0 {
+                format!(
+                    "<a href=\"#cu-rg-{slug}\" style=\"font-size:12px;color:{MID};text-decoration:none\">{sw}{label}</a>",
+                    slug = region_slug(name)
+                )
+            } else {
+                format!("<span style=\"font-size:12px;color:{MID}\">{sw}{label}</span>")
             }
-            Some(format!(
-                "<span style=\"font-size:11px;color:{MID};display:inline-flex;align-items:center;gap:4px\">\
-                   <span style=\"width:9px;height:9px;border-radius:2px;background:rgb({r},{g},{b})\"></span>{name}</span>"
-            ))
         })
         .collect::<Vec<_>>()
         .join("");
 
     format!(
-        "<div style=\"position:relative;height:150px;background:#e7ddcb;border-radius:8px;\
-             overflow:hidden;margin-bottom:8px\">{blobs}</div>\
+        "<style>{css}</style>\
+         <svg id=\"cuwm\" viewBox=\"{VIEWBOX}\" preserveAspectRatio=\"xMidYMid meet\" \
+           style=\"width:100%;height:auto;background:#e7ddcb;border-radius:10px;display:block;margin-bottom:8px\" \
+           role=\"img\"><title>Upcoming events by region</title>{INNER}</svg>\
          <div style=\"display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px\">{legend}</div>"
     )
 }
