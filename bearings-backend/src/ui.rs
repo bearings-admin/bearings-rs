@@ -320,7 +320,9 @@ pub(crate) fn country_region(country: &str) -> &'static str {
         | "Scotland" | "Spain" | "Sweden" | "Switzerland" | "UK" => "Europe",
         "Australia" | "Japan" | "Malaysia" | "New Zealand" | "Philippines" | "Singapore"
         | "South Korea" | "Taiwan" | "Thailand" => "Asia Pacific",
-        "Argentina" | "Brazil" | "Chile" | "Colombia" | "Uruguay" => "Latin America",
+        "Argentina" | "Bolivia" | "Brazil" | "Chile" | "Colombia" | "Costa Rica" | "Cuba"
+        | "Dominican Republic" | "Ecuador" | "El Salvador" | "Guatemala" | "Honduras"
+        | "Nicaragua" | "Panama" | "Paraguay" | "Peru" | "Uruguay" | "Venezuela" => "Latin America",
         "Egypt" | "Israel" | "Morocco" | "South Africa" | "UAE" => "Africa & Middle East",
         _ => "Other",
     }
