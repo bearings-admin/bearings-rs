@@ -15,6 +15,7 @@ pub mod history;
 pub mod ical; // COMING UP — RFC 5545 iCal export
 pub mod now; // NOW zone — composite here-and-now endpoint
 pub mod places;
+pub mod revival; // Archive — content-free "would you return?" revival signal
 pub mod stories; // BEAR ARCHIVES — oral histories
 pub mod submissions; // Public write — CONST-9 fallback intake
 pub mod titles;

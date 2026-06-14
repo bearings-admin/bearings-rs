@@ -25,7 +25,7 @@ pub(crate) async fn zone_places(
         String::new()
     };
     let url_all = format!(
-        "{}/rest/v1/places?active=eq.true\
+        "{}/rest/v1/places?active=eq.true&closed_year=is.null\
          &select=name,place_type,country\
          {cc}\
          &limit=500",
@@ -38,7 +38,7 @@ pub(crate) async fn zone_places(
         String::new()
     };
     let url_filtered = format!(
-        "{}/rest/v1/places?active=eq.true\
+        "{}/rest/v1/places?active=eq.true&closed_year=is.null\
          &select=name,place_type,city,country,address,hours_open,website,\
          booking_link,bear_popular,bear_night_schedule,inclusion_flag_codes\
          {tc}{cc}\

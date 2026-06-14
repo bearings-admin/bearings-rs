@@ -32,9 +32,24 @@ pub(crate) async fn zone_archive(
         db.url
     );
 
-    let (history_res, stories_res) = tokio::join!(
+    let closed_places_url = format!(
+        "{}/rest/v1/places?active=eq.true&closed_year=not.is.null\
+         &select=id,name,city,country,place_type,closed_year,revival_votes\
+         &order=closed_year.desc.nullslast&limit=80",
+        db.url
+    );
+    let closed_clubs_url = format!(
+        "{}/rest/v1/clubs?active=eq.true&closed_year=not.is.null\
+         &select=id,name,city,country,club_type,closed_year,revival_votes\
+         &order=closed_year.desc.nullslast&limit=80",
+        db.url
+    );
+
+    let (history_res, stories_res, cplaces_res, cclubs_res) = tokio::join!(
         db.get_json::<Vec<BearHistoryRow>>(&url),
         db.get_json::<Vec<CommunityStoryRow>>(&stories_url),
+        db.get_json::<Vec<ClosedVenueRow>>(&closed_places_url),
+        db.get_json::<Vec<ClosedVenueRow>>(&closed_clubs_url),
     );
 
     let history = match history_res {
@@ -42,6 +57,8 @@ pub(crate) async fn zone_archive(
         Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
     };
     let all_stories: Vec<CommunityStoryRow> = stories_res.or_log("archive:stories_res");
+    let closed_places: Vec<ClosedVenueRow> = cplaces_res.or_log("archive:closed_places");
+    let closed_clubs: Vec<ClosedVenueRow> = cclubs_res.or_log("archive:closed_clubs");
 
     // Voices grouped by the milestone they speak about.
     let mut voices: HashMap<i64, Vec<&CommunityStoryRow>> = HashMap::new();
@@ -129,6 +146,7 @@ pub(crate) async fn zone_archive(
         ));
     }
 
+    let memorial = build_memorial(&closed_places, &closed_clubs);
     let page_archive_title = i18n::t(i18n::translations(), lang, "page.history.title");
     let body = format!(
         "{VOICES_CSS}\
@@ -138,6 +156,7 @@ pub(crate) async fn zone_archive(
         {hero}\
         <div style=\"display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px\">{chips}</div>\
         {tl}\
+        {memorial}\
         <div class=\"card\" style=\"margin-top:24px\">\
           <div style=\"font-weight:600;font-size:14px;margin-bottom:4px\">Title holders</div>\
           <div style=\"font-size:12px;color:{MID};margin-bottom:6px\">The full lineage of every competition lives in its own zone.</div>\
@@ -368,5 +387,73 @@ fn build_voice_card(s: &CommunityStoryRow) -> String {
            </div>\
            {exc_html}{link_html}\
          </div>"
+    )
+}
+
+fn build_memorial(places: &[ClosedVenueRow], clubs: &[ClosedVenueRow]) -> String {
+    if places.is_empty() && clubs.is_empty() {
+        return String::new();
+    }
+    let card = |v: &ClosedVenueRow, kind: &str| -> String {
+        let name = esc(&v.name);
+        let city = esc(v.city.as_deref().unwrap_or(""));
+        let ctry = esc(v.country.as_deref().unwrap_or(""));
+        let loc = match (city.is_empty(), ctry.is_empty()) {
+            (false, false) => format!("{city}, {ctry}"),
+            (false, true) => city,
+            (true, false) => ctry,
+            _ => String::new(),
+        };
+        let typ = v
+            .kind_type
+            .as_deref()
+            .map(|t| esc(&t.replace('-', " ")))
+            .unwrap_or_default();
+        let meta = if typ.is_empty() {
+            loc
+        } else if loc.is_empty() {
+            typ
+        } else {
+            format!("{loc} &middot; {typ}")
+        };
+        let closed = match v.closed_year {
+            Some(y) => format!("closed {y}"),
+            None => "closed".to_string(),
+        };
+        let id = v.id.unwrap_or(0);
+        let votes = v.revival_votes.unwrap_or(0);
+        format!(
+            "<div style=\"background:#efe9dd;border:1px solid #ddd1bd;border-radius:11px;\
+                  padding:10px 12px;margin-bottom:9px\">\
+              <div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:8px\">\
+                <div>\
+                  <div style=\"font-size:14px;font-weight:600;color:#6f6253\">{name}</div>\
+                  <div style=\"font-size:11px;color:#9a8c79;margin-top:2px\">{meta}</div>\
+                </div>\
+                <span style=\"font-size:10px;color:#8a6a4a;background:#e6d9c4;border-radius:6px;\
+                      padding:1px 7px;white-space:nowrap\">{closed}</span>\
+              </div>\
+              <div style=\"margin-top:9px;padding-top:8px;border-top:1px solid #e0d4c0;\
+                    display:flex;justify-content:flex-end\">\
+                <button hx-post=\"/api/revival/{kind}/{id}\" hx-swap=\"outerHTML\" hx-target=\"this\" \
+                  style=\"font-size:11px;color:#9c4000;background:#fff;border:1px solid {ORANGE};\
+                         border-radius:20px;padding:3px 11px;cursor:pointer\">\u{25B2} {votes} would return</button>\
+              </div>\
+            </div>"
+        )
+    };
+    let cards: String = places
+        .iter()
+        .map(|v| card(v, "place"))
+        .chain(clubs.iter().map(|v| card(v, "club")))
+        .collect();
+    format!(
+        "<div style=\"margin-top:26px\">\
+          <div style=\"font-family:Georgia,serif;font-size:16px;font-weight:600;color:#6f6253;\
+                margin-bottom:3px\">Gone but not forgotten</div>\
+          <div style=\"font-size:12px;color:{MID};margin-bottom:12px\">\
+            Places the scene remembers. Tap &lsquo;would return&rsquo; to signal a revival.</div>\
+          {cards}\
+        </div>"
     )
 }

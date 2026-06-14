@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 pub(crate) async fn zone_clubs(db: SupabaseClient, lang: &str) -> Response {
     let url = format!(
-        "{}/rest/v1/clubs?active=eq.true\
+        "{}/rest/v1/clubs?active=eq.true&closed_year=is.null\
          &select=name,city,country,club_type,description,website,founded_year\
          &order=country.asc,name.asc&limit=100",
         db.url

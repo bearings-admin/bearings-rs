@@ -218,6 +218,18 @@ pub(crate) struct CommunityStoryRow {
     pub link: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ClosedVenueRow {
+    pub id: Option<i64>,
+    pub name: String,
+    pub city: Option<String>,
+    pub country: Option<String>,
+    pub closed_year: Option<i32>,
+    pub revival_votes: Option<i64>,
+    #[serde(alias = "place_type", alias = "club_type")]
+    pub kind_type: Option<String>,
+}
+
 // ── Admin ─────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]

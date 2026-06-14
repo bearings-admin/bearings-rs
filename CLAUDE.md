@@ -128,6 +128,8 @@ These require a 75% supermajority to amend. Operational directives require 60%.
 - **CONST-9** Conversational intake is the primary submission mechanism — the chatbot is never replaced by a cold form.
 - **CONST-10** Inclusion is shown, not decided — never remove a listing for being exclusionary; flag it with `inclusion_flag_codes` and provide the inclusive alternative.
 
+**Corrections & additions — bot-fed, never raw UGC (extends CONST-9):** Users never post free text into the directory (no comment boxes, no "share a memory" walls — the troll & illegal-content review burden is unacceptable). Corrections and additions flow through a conversational agent that turns a chat into a *structured, reviewable diff* (e.g. "Boyberry closed in 2019", "add this bar"), approved by the steward or an automated check. The only public write surfaces are content-free signals — e.g. the Archive "would you return?" revival upvote (`POST /api/revival/:kind/:id`, atomic via `increment_revival_votes`). Intake is the `submissions` table + the chatbot; user text is never rendered unreviewed.
+
 ---
 
 ## Key Collaborator

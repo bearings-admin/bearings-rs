@@ -106,6 +106,7 @@ pub fn build_app(db: db::SupabaseClient) -> Router {
             "/api/future-ideas/:id/upvote",
             post(routes::future_ideas::upvote),
         )
+        .route("/api/revival/:kind/:id", post(routes::revival::vote))
         // ── Submissions ─────────────────────────────────────────
         .route("/api/submissions", post(routes::submissions::create))
         // ── AI crawlability ─────────────────────────────────────
