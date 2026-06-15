@@ -9,7 +9,13 @@ use chrono::{Months, Utc};
 #[allow(unused_imports)]
 use std::collections::HashMap;
 
-pub(crate) async fn zone_admin(db: SupabaseClient, token: Option<String>, lang: &str) -> Response {
+pub(crate) async fn zone_admin(
+    db: SupabaseClient,
+    token: Option<String>,
+    action: Option<String>,
+    id: Option<i64>,
+    lang: &str,
+) -> Response {
     let expected = std::env::var("ADMIN_TOKEN").unwrap_or_else(|_| "bearings-admin".to_string());
     // Timing-safe token check: compare all bytes regardless of early mismatch
     // to mitigate timing oracle attacks on the token.
@@ -24,6 +30,25 @@ pub(crate) async fn zone_admin(db: SupabaseClient, token: Option<String>, lang: 
     }
     if !token_eq(token.as_deref().unwrap_or(""), &expected) {
         return Html("<html><body style=\"font-family:sans-serif;padding:40px\"><h2>Bearings Admin</h2><p>Pass <code>?zone=admin&amp;token=YOUR_TOKEN</code></p></body></html>".to_string()).into_response();
+    }
+
+    // Process an approve/reject action, then redirect to the clean queue URL.
+    if let (Some(act), Some(cid)) = (action.as_deref(), id) {
+        match act {
+            "reject" => {
+                let _ = db
+                    .write_json(
+                        reqwest::Method::PATCH,
+                        &format!("{}/rest/v1/candidate_events?id=eq.{cid}", db.url),
+                        &serde_json::json!({ "status": "rejected" }),
+                    )
+                    .await;
+            }
+            "approve" => approve_candidate(&db, cid).await,
+            _ => {}
+        }
+        let t = urlencoding::encode(token.as_deref().unwrap_or(""));
+        return axum::response::Redirect::to(&format!("/?zone=admin&token={t}")).into_response();
     }
 
     let candidates_url = format!(
@@ -79,4 +104,46 @@ pub(crate) async fn zone_admin(db: SupabaseClient, token: Option<String>, lang: 
     );
 
     Html(shell("Admin", "Feed review.", "archive", &body, lang)).into_response()
+}
+
+/// Promote a pending candidate event into a live `events` row, then mark it
+/// approved. Writes use the service key (RLS-bypassing) via `db.write_json`.
+async fn approve_candidate(db: &SupabaseClient, id: i64) {
+    let url = format!(
+        "{}/rest/v1/candidate_events?id=eq.{id}&select=raw_title,raw_description,raw_date,parsed_country,source_url",
+        db.url
+    );
+    let rows: Vec<CandidateEventRow> = db.get_json(&url).await.unwrap_or_default();
+    let Some(c) = rows.into_iter().next() else {
+        return;
+    };
+    let start = c
+        .raw_date
+        .as_deref()
+        .filter(|d| d.len() >= 8)
+        .map(|d| format!("{}-{}-{}", &d[..4], &d[4..6], &d[6..8]));
+    let event = serde_json::json!({
+        "name": c.raw_title.unwrap_or_default(),
+        "description": c.raw_description,
+        "country": c.parsed_country,
+        "start_date": start,
+        "link": c.source_url,
+        "type": "bear-run",
+        "active": true,
+        "source": "admin-approved",
+    });
+    let _ = db
+        .write_json(
+            reqwest::Method::POST,
+            &format!("{}/rest/v1/events", db.url),
+            &event,
+        )
+        .await;
+    let _ = db
+        .write_json(
+            reqwest::Method::PATCH,
+            &format!("{}/rest/v1/candidate_events?id=eq.{id}", db.url),
+            &serde_json::json!({ "status": "approved" }),
+        )
+        .await;
 }
