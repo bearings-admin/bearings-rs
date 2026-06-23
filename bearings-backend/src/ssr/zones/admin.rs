@@ -14,6 +14,7 @@ pub(crate) async fn zone_admin(
     token: Option<String>,
     action: Option<String>,
     id: Option<i64>,
+    id2: Option<i64>,
     lang: &str,
 ) -> Response {
     let expected = std::env::var("ADMIN_TOKEN").unwrap_or_else(|_| "bearings-admin".to_string());
@@ -45,6 +46,30 @@ pub(crate) async fn zone_admin(
                     .await;
             }
             "approve" => approve_candidate(&db, cid).await,
+            "dup_archive" => {
+                let _ = db
+                    .write_json(
+                        reqwest::Method::PATCH,
+                        &format!("{}/rest/v1/events?id=eq.{cid}", db.url),
+                        &serde_json::json!({
+                            "active": false,
+                            "archive_notes": "Archived via admin duplicate review."
+                        }),
+                    )
+                    .await;
+            }
+            "dup_ignore" => {
+                if let Some(other) = id2 {
+                    let (lo, hi) = if cid < other { (cid, other) } else { (other, cid) };
+                    let _ = db
+                        .write_json(
+                            reqwest::Method::POST,
+                            &format!("{}/rest/v1/event_dupe_ignores", db.url),
+                            &serde_json::json!({ "lo_id": lo, "hi_id": hi }),
+                        )
+                        .await;
+                }
+            }
             _ => {}
         }
         let t = urlencoding::encode(token.as_deref().unwrap_or(""));
@@ -59,14 +84,17 @@ pub(crate) async fn zone_admin(
         "{}/rest/v1/watched_feeds?active=eq.true&select=id,org_name,feed_type,last_fetched,fetch_errors&order=id.asc",
         db.url
     );
+    let dupes_url = format!("{}/rest/v1/event_dupe_candidates?select=*&limit=100", db.url);
 
-    let (cands_res, feeds_res) = tokio::join!(
+    let (cands_res, feeds_res, dupes_res) = tokio::join!(
         db.get_json::<Vec<CandidateEventRow>>(&candidates_url),
         db.get_json::<Vec<WatchedFeedRow>>(&feeds_url),
+        db.get_json::<Vec<DupePairRow>>(&dupes_url),
     );
 
     let candidates = cands_res.or_log("admin:cands_res");
     let feeds = feeds_res.or_log("admin:feeds_res");
+    let dupes = dupes_res.or_log("admin:dupes_res");
 
     let feed_rows: String = feeds.iter().map(|f| {
         let name    = esc(f.org_name.as_deref().unwrap_or(""));
@@ -97,9 +125,38 @@ pub(crate) async fn zone_admin(
         }).collect()
     };
 
+    let dupe_cards: String = if dupes.is_empty() {
+        format!("<div style=\"padding:16px;text-align:center;color:{MID};font-size:13px\">No likely duplicates right now.</div>")
+    } else {
+        dupes.iter().map(|d| {
+            let tok = &expected;
+            let side = |id: i64, name: &str, city: Option<&str>, date: Option<&str>| -> String {
+                format!(
+                    "<div style=\"flex:1;min-width:0\"><div style=\"font-size:13px;font-weight:600\">{n}</div>\
+                     <div style=\"font-size:11px;color:{MID}\">#{id} \u{00b7} {c} \u{00b7} {dt}</div></div>",
+                    n = esc(name), c = esc(city.unwrap_or("\u{2014}")), dt = esc(date.unwrap_or("no date")),
+                )
+            };
+            let a = side(d.id_a, &d.name_a, d.city_a.as_deref(), d.date_a.as_deref());
+            let b = side(d.id_b, &d.name_b, d.city_b.as_deref(), d.date_b.as_deref());
+            let sim = esc(d.sim.as_deref().unwrap_or(""));
+            card(&format!(
+                "<div><div style=\"display:flex;gap:10px;align-items:flex-start;margin-bottom:8px\">\
+                   {a}<span style=\"font-size:10px;color:{MID};white-space:nowrap;padding-top:2px\">sim {sim}</span>{b}</div>\
+                 <div style=\"display:flex;gap:8px;flex-wrap:wrap\">\
+                   <a href=\"/?zone=admin&token={tok}&action=dup_archive&id={ib}\" class=\"btn-g\" style=\"font-size:11px\">Keep #{ia} \u{2014} archive #{ib}</a>\
+                   <a href=\"/?zone=admin&token={tok}&action=dup_archive&id={ia}\" class=\"btn-g\" style=\"font-size:11px\">Keep #{ib} \u{2014} archive #{ia}</a>\
+                   <a href=\"/?zone=admin&token={tok}&action=dup_ignore&id={ia}&id2={ib}\" style=\"font-size:11px;color:{MID};padding:6px 8px\">Not a duplicate</a>\
+                 </div></div>",
+                ia = d.id_a, ib = d.id_b,
+            ))
+        }).collect()
+    };
+
     let body = format!(
-        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Admin â Feed Review</h1><p style=\"font-size:12px;color:{MID};margin-bottom:16px\">Candidates from the nightly feed reader.</p>{h_feeds}<div style=\"overflow-x:auto;margin-bottom:16px\"><table style=\"width:100%;border-collapse:collapse\"><thead><tr style=\"border-bottom:1px solid {TAN}\"><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Feed</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Type</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Last fetched</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Errors</th></tr></thead><tbody>{feed_rows}</tbody></table></div>{h_cands}{cand_cards}",
+        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Admin â Feed Review</h1><p style=\"font-size:12px;color:{MID};margin-bottom:16px\">Candidates from the nightly feed reader.</p>{h_feeds}<div style=\"overflow-x:auto;margin-bottom:16px\"><table style=\"width:100%;border-collapse:collapse\"><thead><tr style=\"border-bottom:1px solid {TAN}\"><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Feed</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Type</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Last fetched</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Errors</th></tr></thead><tbody>{feed_rows}</tbody></table></div>{h_dupes}{dupe_cards}{h_cands}{cand_cards}",
         h_feeds = sh("Watched Feeds", Some(feeds.len())),
+        h_dupes = sh("Possible Duplicates", Some(dupes.len())),
         h_cands = sh("Pending Candidates", Some(candidates.len())),
     );
 

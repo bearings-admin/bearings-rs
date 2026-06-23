@@ -425,3 +425,34 @@ mod tests {
         );
     }
 }
+
+
+/// A candidate duplicate pair from the `event_dupe_candidates` view.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct DupePairRow {
+    pub id_a: i64,
+    pub name_a: String,
+    pub city_a: Option<String>,
+    pub date_a: Option<String>,
+    pub id_b: i64,
+    pub name_b: String,
+    pub city_b: Option<String>,
+    pub date_b: Option<String>,
+    pub sim: Option<String>,
+}
+
+
+/// A provenance-bearing artifact (photo/document) attached to an entity.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ArtifactRow {
+    pub id: i64,
+    pub entity_id: Option<i64>,
+    pub kind: Option<String>,
+    pub title: String,
+    pub description: Option<String>,
+    pub transcription: Option<String>,
+    pub contributor: Option<String>,
+    pub provenance: Option<String>,
+    pub captured_on: Option<String>,
+    pub image_url: Option<String>,
+}

@@ -197,6 +197,17 @@ def looks_like_event(item, skip_filter=False):
     text = (item["raw_title"] + " " + item.get("raw_description", "")).lower()
     return any(kw in text for kw in EVENT_KW)
 
+def passes_filter(item, title_filter, skip_filter):
+    """A per-feed title_filter (comma-separated keywords) takes precedence:
+    only items whose TITLE contains one of the keywords pass. Used to tame
+    mixed community calendars (coffees, brunches, AGMs). Falls back to the
+    global keyword filter when no per-feed filter is set."""
+    if title_filter:
+        kws = [k.strip().lower() for k in title_filter.split(",") if k.strip()]
+        title = item["raw_title"].lower()
+        return any(k in title for k in kws)
+    return looks_like_event(item, skip_filter=skip_filter)
+
 # ── Country hint extraction ────────────────────────────────────
 COUNTRY_MAP = {
     "usa": "USA", "united states": "USA", "germany": "Germany",
@@ -238,6 +249,7 @@ def process_feed(feed):
     etag      = feed.get("last_etag")
     lmod      = feed.get("last_modified")
     is_ical   = ftype in ("ical", "ical-static")
+    tfilter   = feed.get("title_filter")
 
     print(f"\n  [{org}] {url}")
     try:
@@ -270,7 +282,7 @@ def process_feed(feed):
     today_iso = date.today().isoformat()
     for item in items:
         skip_filter = is_ical and ICAL_FEEDS_SKIP_FILTER
-        if not looks_like_event(item, skip_filter=skip_filter):
+        if not passes_filter(item, tfilter, skip_filter):
             feed_skip += 1
             continue
         ps = item.get("parsed_start")
@@ -372,7 +384,7 @@ def main():
     feeds = api_get(
         "watched_feeds?active=eq.true"
         "&feed_type=in.(rss,ical,ical-static)"
-        "&select=id,url,org_name,feed_type,last_etag,last_modified,fetch_errors"
+        "&select=id,url,org_name,feed_type,last_etag,last_modified,fetch_errors,title_filter"
         "&order=id.asc"
     )
     rss_feeds   = [f for f in feeds if f["feed_type"] == "rss"]

@@ -269,6 +269,21 @@ pub(crate) fn stylesheet() -> &'static str {
     .drawer-close-btn{{display:block;text-align:right;font-size:20px;\n\
                         color:{MID};cursor:pointer;margin-bottom:16px;\n\
                         text-decoration:none}}\n\
+    /* Titleholders see-more (pure CSS) */\n\
+    .th-toggle{{display:none}}\n\
+    .th-extra{{display:none}}\n\
+    .th-toggle:checked ~ .th-extra{{display:block}}\n\
+    .th-toggle:checked ~ .th-more{{display:none}}\n\
+    .th-more{{font-size:11px;color:{ORANGE};cursor:pointer;\n\
+              display:inline-block;padding:5px 0;user-select:none}}\n\
+    /* Artifact viewer (pure CSS) */\n\
+    .art-chk{{display:none}}\n\
+    .art-panel{{display:none;margin-top:6px;padding:8px 10px;background:#f3eee3;\n\
+                border:1px solid #e0d4c0;border-radius:8px}}\n\
+    .art-chk:checked ~ .art-panel{{display:block}}\n\
+    .art-badge{{display:inline-flex;gap:5px;align-items:center;font-size:11px;\n\
+                color:{BROWN};background:#efe9dd;border:1px solid {TAN};\n\
+                border-radius:20px;padding:2px 9px;cursor:pointer}}\n\
 "
         )
     })

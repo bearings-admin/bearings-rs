@@ -49,6 +49,7 @@ pub struct ZoneQuery {
     pub token: Option<String>,
     pub action: Option<String>,
     pub id: Option<i64>,
+    pub id2: Option<i64>,
 }
 
 // ── Zone discriminant ─────────────────────────────────────────────────────────
@@ -139,7 +140,7 @@ pub async fn root(State(db): State<SupabaseClient>, Query(q): Query<ZoneQuery>) 
         Zone::Campaigns => zone_campaigns(db, lang_owned).await,
         Zone::DigitalSpaces => zone_digital(db, lang_owned).await,
         Zone::Ical => zone_ical(lang_owned).await,
-        Zone::Admin => zone_admin(db, q.token.clone(), q.action.clone(), q.id, lang_owned).await,
+        Zone::Admin => zone_admin(db, q.token.clone(), q.action.clone(), q.id, q.id2, lang_owned).await,
         Zone::Transparency => zone_transparency(db, lang_owned).await,
         Zone::History | Zone::Unknown => zone_coming_up(db, None, None, None, lang_owned).await,
     }

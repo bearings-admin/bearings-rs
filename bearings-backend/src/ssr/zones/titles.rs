@@ -30,14 +30,29 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
         "{}/rest/v1/clubs?select=id,name,website&active=eq.true&limit=200",
         db.url
     );
-    let (comps_res, holders_res, clubs_res) = tokio::join!(
+    let url_artifacts = format!(
+        "{}/rest/v1/artifacts?active=eq.true&entity_type=eq.competition\
+         &select=id,entity_id,kind,title,description,transcription,contributor,provenance,captured_on,image_url\
+         &order=captured_on.desc.nullslast&limit=200",
+        db.url
+    );
+    let (comps_res, holders_res, clubs_res, arts_res) = tokio::join!(
         db.get_json::<Vec<CompetitionRow>>(&url_comps),
         db.get_json::<Vec<TitleHolderRow>>(&url_holders),
         db.get_json::<Vec<ClubRow>>(&url_clubs),
+        db.get_json::<Vec<ArtifactRow>>(&url_artifacts),
     );
     let comps: Vec<CompetitionRow> = comps_res.or_log("titles:comps_res");
     let holders: Vec<TitleHolderRow> = holders_res.or_log("titles:holders_res");
     let clubs: Vec<ClubRow> = clubs_res.or_log("titles:clubs_res");
+    let artifacts: Vec<ArtifactRow> = arts_res.or_log("titles:arts_res");
+    let mut artifacts_by_comp: std::collections::HashMap<i64, Vec<ArtifactRow>> =
+        std::collections::HashMap::new();
+    for a in artifacts {
+        if let Some(eid) = a.entity_id {
+            artifacts_by_comp.entry(eid).or_default().push(a);
+        }
+    }
 
     // Index clubs by id
     let club_map: std::collections::HashMap<i64, (String, String)> = clubs
@@ -162,7 +177,7 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
                 .map(|v| v.as_slice())
                 .unwrap_or(&[]);
 
-            let holder_rows: String = comp_holders.iter().take(12).map(|h| {
+            let render_row = |h: &&TitleHolderRow| -> String {
                 let name   = esc(h.holder_name.as_str());
                 let year   = h.year.unwrap_or(0) as i64;
                 let hcity  = esc(h.city.as_deref().unwrap_or(""));
@@ -201,11 +216,24 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
                     } else { String::new() },
                     yr = if year > 0 { year.to_string() } else { String::new() },
                 )
-            }).collect();
+            };
 
-            let more_note = if comp_holders.len() > 12 {
-                format!("<div style=\"font-size:11px;color:{MID};padding:4px 0\">+ <a href=\'/?zone=archive\' style=\'color:{ORANGE}\'>{} more in archive →</a></div>",
-                    comp_holders.len() - 12)
+            // First 12 inline; collapse the rest behind a pure-CSS "see more"
+            // toggle that expands the remaining rows in place (no redirect).
+            const VISIBLE: usize = 12;
+            let holder_rows: String =
+                comp_holders.iter().take(VISIBLE).map(|h| render_row(h)).collect();
+            let hidden_rows: String =
+                comp_holders.iter().skip(VISIBLE).map(|h| render_row(h)).collect();
+            let overflow = comp_holders.len().saturating_sub(VISIBLE);
+
+            let more_note = if overflow > 0 {
+                format!(
+                    "<input type=\"checkbox\" id=\"thmore-{cid}\" class=\"th-toggle\">\
+                     <div class=\"th-extra\">{hidden_rows}</div>\
+                     <label for=\"thmore-{cid}\" class=\"th-more\">+ {overflow} more \u{25BE}</label>",
+                    cid = comp.id
+                )
             } else {
                 String::new()
             };
@@ -221,6 +249,10 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
                 })
             }).unwrap_or_default();
 
+            let artifact_h = build_artifacts(
+                artifacts_by_comp.get(&comp.id).map(|v| v.as_slice()).unwrap_or(&[]),
+            );
+
             sections.push_str(&card(&format!(
                 "<div>\
                   <div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:8px\">\
@@ -233,6 +265,7 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
                     </div>\
                   </div>\
                   {holders_h}\
+                  {artifact_h}\
                 </div>",
                 holders_h = if !holder_rows.is_empty() {
                     format!("<div style=\"margin-top:10px\">{holder_rows}{more_note}</div>")
@@ -258,4 +291,66 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
         lang,
     ))
     .into_response()
+}
+
+
+/// Render artifact source-badges (pure-CSS expanders) for a competition card.
+fn build_artifacts(arts: &[ArtifactRow]) -> String {
+    if arts.is_empty() {
+        return String::new();
+    }
+    arts.iter()
+        .map(|a| {
+            let id = a.id;
+            let title = esc(&a.title);
+            let kind = esc(&a.kind.as_deref().unwrap_or("artifact").replace('-', " "));
+            let prov = esc(a.provenance.as_deref().unwrap_or(""));
+            let trans = esc(a.transcription.as_deref().unwrap_or(""));
+            let captured = esc(a.captured_on.as_deref().unwrap_or(""));
+            let media = match a.image_url.as_deref() {
+                Some(u) if !u.is_empty() => {
+                    let ue = esc(u);
+                    format!(
+                        "<img src=\"{ue}\" alt=\"{title}\" style=\"max-width:100%;\
+                           border-radius:6px;margin:6px 0\"/>\
+                         <div><a href=\"{ue}\" target=\"_blank\" rel=\"noopener\" download \
+                           style=\"font-size:11px;color:{ORANGE}\">\u{2193} View / download image</a></div>"
+                    )
+                }
+                _ => format!(
+                    "<div style=\"font-size:11px;color:{MID};font-style:italic\">\
+                       Image on file with the steward \u{2014} not yet published.</div>"
+                ),
+            };
+            let cap = if captured.is_empty() {
+                String::new()
+            } else {
+                format!(" \u{00b7} {captured}")
+            };
+            let prov_block = if prov.is_empty() {
+                String::new()
+            } else {
+                format!("<div style=\"font-size:11px;color:{BROWN};margin-top:6px\">{prov}</div>")
+            };
+            let trans_block = if trans.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "<div style=\"font-size:10px;color:{MID};margin-top:6px;line-height:1.5\">\
+                       Transcribed: {trans}</div>"
+                )
+            };
+            format!(
+                "<div style=\"margin-top:8px\">\
+                   <input type=\"checkbox\" id=\"art-{id}\" class=\"art-chk\">\
+                   <label for=\"art-{id}\" class=\"art-badge\">\u{1f4dc} Source: {title}</label>\
+                   <div class=\"art-panel\">\
+                     <div style=\"font-size:12px;font-weight:600;color:{BROWN}\">{title}</div>\
+                     <div style=\"font-size:11px;color:{MID};margin:2px 0 6px\">{kind}{cap}</div>\
+                     {media}{prov_block}{trans_block}\
+                   </div>\
+                 </div>"
+            )
+        })
+        .collect()
 }
