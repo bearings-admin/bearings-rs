@@ -10,6 +10,10 @@
 # clone) on a branch, open a PR, let CI merge it, then run this. See CONTRIBUTING.md.
 set -euo pipefail
 
+# Ensure cargo is on PATH even when run non-interactively (e.g. ssh host './deploy.sh').
+[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+command -v cargo >/dev/null 2>&1 || export PATH="$HOME/.cargo/bin:$PATH"
+
 REPO_DIR="${REPO_DIR:-/opt/bearings-rs}"
 SERVICE="${SERVICE:-bearings-backend}"
 BRANCH="${BRANCH:-main}"
