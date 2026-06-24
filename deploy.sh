@@ -1,46 +1,36 @@
-
-#!/bin/bash
-# deploy.sh — cross-compile and deploy bearings-rs to Hostinger VPS
-# Usage: ./deploy.sh
-# Prerequisites: cargo, cross (cargo install cross), SSH key for VPS
-
+#!/usr/bin/env bash
+# deploy.sh — deploy bearings-rs on the VPS.
+#
+# Run this ON the VPS, in the deploy checkout (/opt/bearings-rs).
+# It makes the running server match GitHub `main`:
+#   fetch origin/main -> hard reset -> build release -> restart service -> health check
+#
+# GitHub `main` is the single source of truth; this checkout is deploy-only and
+# must never be hand-edited. Develop in the /opt/bearings-dev worktree (or a local
+# clone) on a branch, open a PR, let CI merge it, then run this. See CONTRIBUTING.md.
 set -euo pipefail
 
-VPS_HOST="${VPS_HOST:?Set VPS_HOST to your Hostinger VPS IP}"
-VPS_USER="${VPS_USER:-bearings}"
+REPO_DIR="${REPO_DIR:-/opt/bearings-rs}"
+SERVICE="${SERVICE:-bearings-backend}"
+BRANCH="${BRANCH:-main}"
+HEALTH_URL="${HEALTH_URL:-http://localhost:3000/health}"
 
-# Detect VPS architecture — Hostinger cloud VPS is almost always x86_64
-# Change to aarch64-unknown-linux-gnu for ARM VPS
-TARGET="${CROSS_TARGET:-x86_64-unknown-linux-gnu}"
+cd "$REPO_DIR"
 
-echo "▸ Target:  $TARGET"
-echo "▸ Host:    $VPS_USER@$VPS_HOST"
-echo ""
+echo "▸ Fetching origin/$BRANCH ..."
+git fetch origin "$BRANCH"
 
-# Use 'cross' for cross-compilation (handles musl libc properly)
-# Install: cargo install cross
-# Alternatively use: cargo build --release if building on the VPS directly
+echo "▸ Resetting $REPO_DIR to origin/$BRANCH (deploy checkout is not hand-edited) ..."
+git reset --hard "origin/$BRANCH"
 
-echo "▸ Building bearings-backend..."
-cross build --release -p bearings-backend --target "$TARGET"
+echo "▸ Building release (bearings-backend) ..."
+cargo build --release -p bearings-backend
 
-echo "▸ Building bearings-agent..."
-cross build --release -p bearings-agent --target "$TARGET"
+echo "▸ Restarting $SERVICE ..."
+systemctl restart "$SERVICE"
 
-echo "▸ Stopping services on VPS..."
-ssh "$VPS_USER@$VPS_HOST" "sudo systemctl stop bearings-backend bearings-agent 2>/dev/null || true"
+sleep 1
+echo "▸ Health check ($HEALTH_URL):"
+curl -fsS "$HEALTH_URL" && echo " ✓"
 
-echo "▸ Copying binaries..."
-scp "target/$TARGET/release/bearings-backend" "$VPS_USER@$VPS_HOST:/opt/bearings-backend/bearings-backend"
-scp "target/$TARGET/release/bearings-agent"   "$VPS_USER@$VPS_HOST:/opt/bearings-agent/bearings-agent"
-
-echo "▸ Starting services..."
-ssh "$VPS_USER@$VPS_HOST" "sudo systemctl start bearings-backend bearings-agent"
-
-echo "▸ Status:"
-ssh "$VPS_USER@$VPS_HOST" "sudo systemctl status bearings-backend bearings-agent --no-pager -l"
-
-echo ""
-echo "✓ Deploy complete."
-echo "  Backend: https://$VPS_HOST/health"
-echo "  llms.txt: https://$VPS_HOST/llms.txt"
+echo "✓ Deploy complete — now serving $(git rev-parse --short HEAD) ($(git log -1 --pretty=%s))."

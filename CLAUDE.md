@@ -30,7 +30,7 @@ A verified living directory of bear events, places, clubs, title holders, creato
 | Live URL | https://srv1744879.hstgr.cloud — Caddy reverse proxy + Let's Encrypt → localhost:3000 |
 | VPS path | `/opt/bearings-rs/` — workspace root |
 | SSH | `ssh root@2.25.191.141` (key: `~/.ssh/id_ed25519`) |
-| Deploy | `systemctl restart bearings-backend` after `cargo build --release` |
+| Deploy | `./deploy.sh` on the VPS (pulls `origin/main`, builds release, restarts `bearings-backend`) |
 | GitHub | `bearings-admin/bearings-rs` — `gh` CLI authenticated as `bearings-admin` |
 
 ---
@@ -173,7 +173,11 @@ Gaspar's primary work will be the Leptos frontend (`bearings-frontend`). The Axu
 
 ## Workflow Notes
 
-- **Edit files:** SSH to VPS → Python patch script → `cargo check` → `cargo build --release` → `systemctl restart bearings-backend`
-- **Test before deploying:** `~/.cargo/bin/cargo test -p bearings-backend --bin bearings-backend`
-- **Commit pattern:** `git add -p` specific files, never `git add -A` (secrets risk)
+**GitHub `main` is the single source of truth. The VPS is deploy-only.** (Decided 2026-06-24, to enable pairing with Gaspar without clobbering each other. See `CONTRIBUTING.md`.)
+
+- **Develop on a branch — never on `main`, never by hand-editing the deploy checkout.** Vibecoding happens in the dev worktree `/opt/bearings-dev` (or a local clone), not in `/opt/bearings-rs`.
+- **Flow:** branch → commit → push → open PR → CI (`Check + Test + Lint`) must pass → squash-merge. **No human PR approval is required** — merges are gated by CI, not by a review click. `gh pr merge --auto --squash` lands it on green.
+- **Deploy:** on the VPS, `cd /opt/bearings-rs && ./deploy.sh` — fetches `origin/main`, `git reset --hard`, `cargo build --release`, restarts `bearings-backend`. The deploy checkout is never hand-edited.
+- **Test before deploying:** `cargo test -p bearings-backend --lib` (unit, no network).
+- **Commit pattern:** `git add -p` specific files, never `git add -A` (secrets risk).
 - **Bluesky publishing:** All posts require steward review. 4-hour cooldown. Agent never posts without review.
