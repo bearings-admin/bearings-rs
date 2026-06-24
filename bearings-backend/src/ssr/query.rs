@@ -463,4 +463,5 @@ pub(crate) struct PredictionRow {
     pub sample_name: Option<String>,
     pub city: Option<String>,
     pub country: Option<String>,
+    pub website: Option<String>,
 }
