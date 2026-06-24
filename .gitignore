@@ -30,3 +30,6 @@ bearings-backend.bin
 __pycache__/
 *.pyc
 logs/
+
+# Local scratch (not part of the repo)
+archive/

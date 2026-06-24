@@ -529,8 +529,19 @@ fn approx_week_label(d: &str) -> String {
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(0);
     const MONTHS: [&str; 13] = [
-        "", "January", "February", "March", "April", "May", "June", "July", "August",
-        "September", "October", "November", "December",
+        "",
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
     ];
     let mon = MONTHS.get(m).copied().unwrap_or("");
     let part = if day == 0 {
