@@ -12,13 +12,16 @@ from email.message import EmailMessage
 from urllib.request import Request, urlopen
 
 
-def build_digest(ts, stats, total_new, total_past, pending_count, gaps):
+def build_digest(ts, stats, total_new, total_past, pending_count, gaps,
+                 archived=None, predictions=None):
     day = ts[:10]
     L = [f"Bearings nightly research digest — {day} (UTC)", ""]
     L.append(f"New candidates queued:  {total_new}")
     L.append(f"Past-dated skipped:     {total_past}")
     L.append(f"Pending review queue:   {pending_count}")
     L.append(f"Title-holder gaps:      {len(gaps)}")
+    L.append(f"Archived (date passed): {len(archived) if archived else 0}")
+    L.append(f"Likely repeats ahead:   {len(predictions) if predictions else 0}")
     L += ["", "Per feed:"]
     for s in stats:
         err = f"   ERROR: {s['error']}" if s.get("error") else ""
@@ -27,6 +30,15 @@ def build_digest(ts, stats, total_new, total_past, pending_count, gaps):
         L += ["", "Competitions missing a title holder:"]
         for g in gaps:
             L.append(f"  - [{g.get('scope','')}] {g.get('name','')} ({g.get('country','')})")
+    if archived:
+        L += ["", f"Archived now-past events ({len(archived)}):"]
+        for a in archived:
+            L.append(f"  - {a.get('name','')}")
+    if predictions:
+        L += ["", f"Likely to repeat — no confirmed edition yet ({len(predictions)}); consider outreach:"]
+        for p in predictions:
+            L.append(f"  - {p.get('sample_name','')} ({p.get('city','')}) "
+                     f"~ {p.get('predicted_date','')} [{p.get('confidence','')}]")
     L += ["", "Review queue: https://srv1744879.hstgr.cloud/?zone=admin&token=<ADMIN_TOKEN>"]
     body = "\n".join(L)
     subject = f"[Bearings] research digest {day}: {total_new} new, {pending_count} pending"

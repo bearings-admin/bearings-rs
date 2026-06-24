@@ -377,6 +377,45 @@ def report_missing_title_holders():
     return gaps
 
 
+def archive_passed_events():
+    """Lifecycle: events whose date has passed but are still active=true are
+    archived (active=false, status='past'). Rows are RETAINED — the recurrence
+    engine reads history by date regardless of active, so this both keeps the
+    live listings clean and feeds next year's foresight. Returns archived rows."""
+    today = date.today().isoformat()
+    try:
+        rows = api_get(
+            "events?active=eq.true"
+            f"&or=(end_date.lt.{today},and(end_date.is.null,start_date.lt.{today}))"
+            "&select=id,name")
+    except Exception as e:
+        print(f"[lifecycle] could not load past-active events: {e}")
+        return []
+    archived = []
+    for r in rows:
+        code = api_patch(f"events?id=eq.{r['id']}",
+                         {"active": False, "status": "past"})
+        if code in (200, 204):
+            archived.append(r)
+    print(f"[lifecycle] archived {len(archived)} past event(s)")
+    return archived
+
+
+def report_foresight():
+    """Predicted recurrences with NO confirmed next edition — the outreach list.
+    As editions age into the past, series here become 'confirm/chase' nudges."""
+    try:
+        preds = api_get(
+            "event_predictions"
+            "?select=sample_name,city,predicted_date,confidence"
+            "&order=predicted_date")
+    except Exception as e:
+        print(f"[foresight] could not load predictions: {e}")
+        return []
+    print(f"[foresight] {len(preds)} likely repeat(s) awaiting confirmation")
+    return preds
+
+
 def main():
     ts = datetime.now(timezone.utc).isoformat()
     print(f"[{ts}] Bearings feed reader starting")
@@ -400,13 +439,16 @@ def main():
     print(f"\n[done] {total_new} new candidates queued  |  {total_past} past-dated skipped")
 
     gaps = report_missing_title_holders()
+    archived = archive_passed_events()
+    predictions = report_foresight()
 
     try:
         pending_count = len(api_get("candidate_events?status=eq.pending&select=id"))
     except Exception:
         pending_count = -1
 
-    digest = build_digest(ts, stats, total_new, total_past, pending_count, gaps)
+    digest = build_digest(ts, stats, total_new, total_past, pending_count, gaps,
+                          archived, predictions)
     write_log(digest)
     send_digest(digest)
 

@@ -463,4 +463,7 @@ pub(crate) struct ArtifactRow {
 pub(crate) struct PredictionRow {
     pub predicted_date: Option<String>,
     pub confidence: Option<String>,
+    pub sample_name: Option<String>,
+    pub city: Option<String>,
+    pub country: Option<String>,
 }

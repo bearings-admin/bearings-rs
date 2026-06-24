@@ -89,7 +89,7 @@ pub(crate) async fn zone_coming_up(
         format!("&country=eq.{}", urlencoding::encode(country))
     };
     let predictions_url = format!(
-        "{}/rest/v1/event_predictions?select=predicted_date,confidence{pred_country}",
+        "{}/rest/v1/event_predictions?select=sample_name,city,country,predicted_date,confidence{pred_country}",
         db.url
     );
     let (data_res, bar_res, pred_res) = tokio::join!(
@@ -227,16 +227,16 @@ pub(crate) async fn zone_coming_up(
     } else {
         format!("&event_country={}", urlencoding::encode(country))
     };
-    let predictions: Vec<(Option<String>, f64)> = pred_res
-        .unwrap_or_default()
-        .into_iter()
+    let pred_rows: Vec<PredictionRow> = pred_res.unwrap_or_default();
+    let predictions: Vec<(Option<String>, f64)> = pred_rows
+        .iter()
         .map(|p| {
             let op = match p.confidence.as_deref() {
                 Some("high") => 0.42,
                 Some("medium") => 0.26,
                 _ => 0.16,
             };
-            (p.predicted_date, op)
+            (p.predicted_date.clone(), op)
         })
         .collect();
     let nav_base = format!("/?zone=coming-up&lang={lang}{country_enc}");
@@ -340,7 +340,67 @@ pub(crate) async fn zone_coming_up(
         disp_events.iter().map(make_cu_card).collect()
     };
 
-    let empty_html = if disp_events.is_empty() {
+    // Tentative (forecasted) events for the list: predictions inside the selected
+    // window/month, shown distinctly with an approximate week and a warning.
+    let tentative_rows: Vec<&PredictionRow> = pred_rows
+        .iter()
+        .filter(|p| {
+            let d = match p.predicted_date.as_deref() {
+                Some(d) => d,
+                None => return false,
+            };
+            if d < from_str.as_str() || d > to_str.as_str() {
+                return false;
+            }
+            if let Some(m) = month_filter {
+                let pm = d.split('-').nth(1).and_then(|s| s.parse::<u32>().ok());
+                if pm != Some(m) {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect();
+    let tentative = if tentative_rows.is_empty() {
+        String::new()
+    } else {
+        let cards: String = tentative_rows
+            .iter()
+            .map(|p| {
+                let name = esc(p.sample_name.as_deref().unwrap_or("(likely event)"));
+                let city = esc(p.city.as_deref().unwrap_or(""));
+                let ctry = esc(p.country.as_deref().unwrap_or(""));
+                let loc = match (city.is_empty(), ctry.is_empty()) {
+                    (false, false) => format!("{city}, {ctry}"),
+                    (false, true) => city.to_string(),
+                    (true, false) => ctry.to_string(),
+                    _ => String::new(),
+                };
+                let approx = approx_week_label(p.predicted_date.as_deref().unwrap_or(""));
+                let conf = esc(p.confidence.as_deref().unwrap_or(""));
+                format!(
+                    "<div style=\"border:1px dashed {GOLD};background:#FFFDF6;border-radius:14px;\
+                       padding:12px 14px;margin-bottom:8px\">\
+                      <div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:10px\">\
+                        <div style=\"flex:1;min-width:0\">\
+                          <div style=\"font-weight:600;font-size:14px;line-height:1.3;color:{BROWN}\">{name}</div>\
+                          <div style=\"font-size:12px;color:{MID};margin-top:2px\">{loc} \u{00b7} ~ {approx}</div>\
+                          <div style=\"font-size:11px;color:#9a7b1f;margin-top:5px\">\u{26a0} Specific dates not yet announced \u{2014} projected from past years ({conf} confidence)</div>\
+                        </div>\
+                        <span class=\"badge\" style=\"background:{GOLD};color:{DARK};white-space:nowrap\">tentative</span>\
+                      </div>\
+                    </div>"
+                )
+            })
+            .collect();
+        format!(
+            "<div style=\"font-size:11px;font-weight:700;text-transform:uppercase;\
+               letter-spacing:.1em;color:{BROWN};padding:14px 4px 4px\">\
+               Likely to repeat \u{00b7} awaiting confirmation</div>{cards}"
+        )
+    };
+
+    let empty_html = if disp_events.is_empty() && tentative_rows.is_empty() {
         format!(
             "<div style=\"text-align:center;padding:32px 0;color:{MID}\">\
               <div style=\"font-size:32px;margin-bottom:8px\">🐻</div>\
@@ -430,6 +490,7 @@ pub(crate) async fn zone_coming_up(
           {bar}\
           {h_ev}\
           {ev_cards}\
+          {tentative}\
           {empty_html}\
           {ical_block}\
           {h_vn}\
@@ -456,6 +517,33 @@ pub(crate) async fn zone_coming_up(
 }
 
 // ── ZONE: BEAR ARCHIVES (decade tabs) ────────────────────────
+
+/// Human "approximate week" label from an ISO date, e.g. "mid May 2027".
+fn approx_week_label(d: &str) -> String {
+    let mut it = d.splitn(3, '-');
+    let y = it.next().unwrap_or("");
+    let m = it.next().and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+    let day = it
+        .next()
+        .and_then(|s| s.get(0..2))
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+    const MONTHS: [&str; 13] = [
+        "", "January", "February", "March", "April", "May", "June", "July", "August",
+        "September", "October", "November", "December",
+    ];
+    let mon = MONTHS.get(m).copied().unwrap_or("");
+    let part = if day == 0 {
+        ""
+    } else if day <= 10 {
+        "early "
+    } else if day <= 20 {
+        "mid "
+    } else {
+        "late "
+    };
+    format!("{part}{mon} {y}")
+}
 
 fn region_slug(r: &str) -> String {
     r.to_lowercase().replace(" & ", "-").replace(' ', "-")

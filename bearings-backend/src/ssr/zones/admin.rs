@@ -85,16 +85,22 @@ pub(crate) async fn zone_admin(
         db.url
     );
     let dupes_url = format!("{}/rest/v1/event_dupe_candidates?select=*&limit=100", db.url);
+    let preds_url = format!(
+        "{}/rest/v1/event_predictions?select=sample_name,city,country,predicted_date,confidence&order=predicted_date&limit=60",
+        db.url
+    );
 
-    let (cands_res, feeds_res, dupes_res) = tokio::join!(
+    let (cands_res, feeds_res, dupes_res, preds_res) = tokio::join!(
         db.get_json::<Vec<CandidateEventRow>>(&candidates_url),
         db.get_json::<Vec<WatchedFeedRow>>(&feeds_url),
         db.get_json::<Vec<DupePairRow>>(&dupes_url),
+        db.get_json::<Vec<PredictionRow>>(&preds_url),
     );
 
     let candidates = cands_res.or_log("admin:cands_res");
     let feeds = feeds_res.or_log("admin:feeds_res");
     let dupes = dupes_res.or_log("admin:dupes_res");
+    let preds = preds_res.or_log("admin:preds_res");
 
     let feed_rows: String = feeds.iter().map(|f| {
         let name    = esc(f.org_name.as_deref().unwrap_or(""));
@@ -153,10 +159,30 @@ pub(crate) async fn zone_admin(
         }).collect()
     };
 
+    let pred_cards: String = if preds.is_empty() {
+        format!("<div style=\"padding:16px;text-align:center;color:{MID};font-size:13px\">No predicted repeats yet \u{2014} needs multi-year history.</div>")
+    } else {
+        preds.iter().map(|p| {
+            let name = esc(p.sample_name.as_deref().unwrap_or("(unknown series)"));
+            let city = esc(p.city.as_deref().unwrap_or(""));
+            let date = esc(p.predicted_date.as_deref().unwrap_or(""));
+            let conf = esc(p.confidence.as_deref().unwrap_or(""));
+            let badge = match p.confidence.as_deref() { Some("high") => ORANGE, _ => GOLD };
+            card(&format!(
+                "<div style=\"display:flex;justify-content:space-between;align-items:center;gap:8px\">\
+                   <div><div style=\"font-size:14px;font-weight:600\">{name}</div>\
+                     <div style=\"font-size:11px;color:{MID}\">{city} \u{00b7} likely ~ {date} \u{00b7} no confirmed edition yet</div></div>\
+                   <span style=\"font-size:10px;color:#fff;background:{badge};border-radius:6px;padding:2px 7px;white-space:nowrap\">{conf}</span>\
+                 </div>"
+            ))
+        }).collect()
+    };
+
     let body = format!(
-        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Admin â Feed Review</h1><p style=\"font-size:12px;color:{MID};margin-bottom:16px\">Candidates from the nightly feed reader.</p>{h_feeds}<div style=\"overflow-x:auto;margin-bottom:16px\"><table style=\"width:100%;border-collapse:collapse\"><thead><tr style=\"border-bottom:1px solid {TAN}\"><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Feed</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Type</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Last fetched</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Errors</th></tr></thead><tbody>{feed_rows}</tbody></table></div>{h_dupes}{dupe_cards}{h_cands}{cand_cards}",
+        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Admin â Feed Review</h1><p style=\"font-size:12px;color:{MID};margin-bottom:16px\">Candidates from the nightly feed reader.</p>{h_feeds}<div style=\"overflow-x:auto;margin-bottom:16px\"><table style=\"width:100%;border-collapse:collapse\"><thead><tr style=\"border-bottom:1px solid {TAN}\"><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Feed</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Type</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Last fetched</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Errors</th></tr></thead><tbody>{feed_rows}</tbody></table></div>{h_preds}{pred_cards}{h_dupes}{dupe_cards}{h_cands}{cand_cards}",
         h_feeds = sh("Watched Feeds", Some(feeds.len())),
         h_dupes = sh("Possible Duplicates", Some(dupes.len())),
+        h_preds = sh("Likely Repeats \u{2014} confirm/chase", Some(preds.len())),
         h_cands = sh("Pending Candidates", Some(candidates.len())),
     );
 
