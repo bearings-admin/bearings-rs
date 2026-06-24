@@ -4,7 +4,18 @@ members = [
     "bearings-shared",
     "bearings-backend",
     "bearings-agent",
-    "bearings-frontend",  # Leptos SSR frontend — Phase 3
+    # Leptos SSR frontend — Phase 3, PARKED pending the framework decision
+    # (Leptos vs Yew vs stay-HTMX; see FRONTEND_BRIEF.md). It stays a member so
+    # the crate remains coherent and buildable (`cargo build -p bearings-frontend`),
+    # but it is excluded from the default build set below and from CI, so an
+    # unfinished stub no longer gates every build or biases the open decision.
+    "bearings-frontend",
+]
+# Everyday `cargo build`/`test`/`clippy` (no --workspace) skip the parked stub.
+default-members = [
+    "bearings-shared",
+    "bearings-backend",
+    "bearings-agent",
 ]
 resolver = "2"
 
