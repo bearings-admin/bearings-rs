@@ -136,14 +136,14 @@ impl SupabaseClient {
         response.json::<T>().await.map_err(AppError::Database)
     }
 
-    /// POST with service key, return the created rows.
-    /// Used by submissions.rs to get the generated ID back.
-    pub async fn write_json_returning<B: serde::Serialize>(
+    /// POST with service key, return the created rows deserialised into `Vec<T>`.
+    /// Used by the submission repository to get the generated id back.
+    pub async fn write_json_returning<B: serde::Serialize, T: serde::de::DeserializeOwned>(
         &self,
         method: reqwest::Method,
         url: &str,
         body: &B,
-    ) -> Result<Vec<serde_json::Value>, AppError> {
+    ) -> Result<Vec<T>, AppError> {
         let response = self
             .client
             .request(method, url)
@@ -155,7 +155,7 @@ impl SupabaseClient {
             .send()
             .await
             .map_err(AppError::Database)?;
-        response.json().await.map_err(AppError::Database)
+        response.json::<Vec<T>>().await.map_err(AppError::Database)
     }
 
     /// Fire-and-forget write (PATCH/POST) with no response body. Used by the

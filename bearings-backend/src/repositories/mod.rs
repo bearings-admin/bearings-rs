@@ -22,7 +22,9 @@ pub mod flag_repo;
 pub mod future_idea_repo;
 pub mod history_repo;
 pub mod place_repo;
+pub mod revival_repo;
 pub mod story_repo;
+pub mod submission_repo;
 pub mod title_repo;
 pub mod transparency_repo;
 
