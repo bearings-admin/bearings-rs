@@ -456,3 +456,11 @@ pub(crate) struct ArtifactRow {
     pub captured_on: Option<String>,
     pub image_url: Option<String>,
 }
+
+
+/// A predicted (shadow) recurrence from the `event_predictions` view.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct PredictionRow {
+    pub predicted_date: Option<String>,
+    pub confidence: Option<String>,
+}

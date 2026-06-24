@@ -375,6 +375,9 @@ pub(crate) fn timeline_bar(
     active_month: Option<u32>,
     href_base: &str,
     hx_target: &str,
+    start_year: i32,
+    start_month: u32,
+    predictions: &[(Option<String>, f64)],
 ) -> String {
     let months = [
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -382,51 +385,110 @@ pub(crate) fn timeline_bar(
     let bear_col = [
         DARK, MID, BROWN, BROWN, ORANGE, ORANGE, GOLD, GOLD, TAN, TAN, "#AAAAAA", DARK,
     ];
+    // Rolling 12-month window anchored at (start_year, start_month). Slot i is the
+    // i-th month from now; events bucket by their actual year AND month so next
+    // year's occurrences land in the correct forward slot (no calendar-year reset).
+    let base0 = (start_month.clamp(1, 12) - 1) as i32;
     let mut counts = [0usize; 12];
     for d_opt in start_dates {
         if let Some(d) = d_opt.as_deref() {
             let parts: Vec<&str> = d.splitn(3, '-').collect();
-            if let Some(m) = parts.get(1).and_then(|s| s.parse::<usize>().ok()) {
+            let y = parts.first().and_then(|s| s.parse::<i32>().ok());
+            let m = parts.get(1).and_then(|s| s.parse::<i32>().ok());
+            if let (Some(y), Some(m)) = (y, m) {
                 if (1..=12).contains(&m) {
-                    counts[m - 1] += 1;
+                    let off = (y - start_year) * 12 + (m - 1 - base0);
+                    if (0..12).contains(&off) {
+                        counts[off as usize] += 1;
+                    }
                 }
             }
         }
     }
-    let max = counts.iter().copied().max().unwrap_or(1).max(1) as f64;
+    // Predicted "shadow" repeats, bucketed into the same rolling slots.
+    let mut shadow = [0usize; 12];
+    let mut shadow_op = [0.0f64; 12];
+    for (d_opt, op) in predictions {
+        if let Some(d) = d_opt.as_deref() {
+            let parts: Vec<&str> = d.splitn(3, '-').collect();
+            let y = parts.first().and_then(|s| s.parse::<i32>().ok());
+            let m = parts.get(1).and_then(|s| s.parse::<i32>().ok());
+            if let (Some(y), Some(m)) = (y, m) {
+                if (1..=12).contains(&m) {
+                    let off = (y - start_year) * 12 + (m - 1 - base0);
+                    if (0..12).contains(&off) {
+                        let o = off as usize;
+                        shadow[o] += 1;
+                        if *op > shadow_op[o] {
+                            shadow_op[o] = *op;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let max = (0..12)
+        .map(|i| counts[i] + shadow[i])
+        .max()
+        .unwrap_or(1)
+        .max(1) as f64;
     let bars: String = (0..12).map(|i| {
+        let m0  = ((base0 + i as i32) % 12) as usize;
+        let mon = m0 as u32 + 1;
+        let yr  = start_year + (base0 + i as i32) / 12;
         let h   = if counts[i] > 0 { (counts[i] as f64 / max * 40.0).max(5.0) } else { 2.0 };
-        let on  = active_month == Some(i as u32 + 1);
-        let col = if on { ORANGE } else { bear_col[i] };
+        let sh  = if shadow[i] > 0 { (shadow[i] as f64 / max * 40.0).max(5.0) } else { 0.0 };
+        let shadow_div = if sh > 0.0 {
+            format!(
+                "<div style=\"width:100%;height:{sh}px;background:rgba(210,105,30,{op});\
+                  border:1px dashed {ORANGE};border-radius:3px\" title=\"likely to repeat\"></div>",
+                op = shadow_op[i],
+            )
+        } else {
+            String::new()
+        };
+        let on  = active_month == Some(mon);
+        let col = if on { ORANGE } else { bear_col[m0] };
         let lc  = if on { ORANGE } else { MID };
         let fw  = if on { "700" } else { "400" };
         let cnt = if counts[i] > 0 { counts[i].to_string() } else { String::new() };
+        // Mark January (the year boundary) with the year + a dotted divider.
+        let lbl = if mon == 1 {
+            format!("Jan \u{2019}{:02}", yr.rem_euclid(100))
+        } else {
+            months[m0].to_string()
+        };
+        let edge = if mon == 1 && i > 0 {
+            format!(";border-left:1px dotted {TAN};padding-left:3px")
+        } else {
+            String::new()
+        };
         let htmx = if !hx_target.is_empty() {
             format!(
-                " hx-get=\"{href_base}&month={mn}\"\
+                " hx-get=\"{href_base}&months_ahead=12&month={mon}\"\
                   hx-target=\"{tgt}\" hx-select=\"{tgt}\" hx-swap=\"outerHTML\"\
                   hx-indicator=\"#bar-spin\"",
-                mn  = i + 1,
                 tgt = hx_target,
                 href_base = href_base,
             )
         } else { String::new() };
         format!(
-            "<a href=\"{href_base}&month={mn}\"{htmx}\
-               style=\"flex:1;display:flex;flex-direction:column;align-items:center;gap:2px\"\
-               title=\"{lbl}: {n} events\">\
+            "<a href=\"{href_base}&months_ahead=12&month={mon}\"{htmx}\
+               style=\"flex:1;display:flex;flex-direction:column;align-items:center;gap:2px{edge}\"\
+               title=\"{lbl} {yr}: {n} events\">\
               <span style=\"font-size:9px;color:{lc};font-weight:{fw}\">{cnt}</span>\
-              <div style=\"width:100%;height:{h}px;background:{col};border-radius:3px;transition:all .15s\"></div>\
+              <div style=\"width:100%;height:44px;display:flex;flex-direction:column;justify-content:flex-end;gap:1px\">\
+                {shadow_div}\
+                <div style=\"width:100%;height:{h}px;background:{col};border-radius:3px;transition:all .15s\"></div>\
+              </div>\
               <span style=\"font-size:8px;color:{lc};font-weight:{fw}\">{lbl}</span>\
             </a>",
-            mn  = i + 1,
-            lbl = months[i],
-            n   = counts[i],
+            n = counts[i],
         )
     }).collect();
     let clear_link = if active_month.is_some() {
         format!(
-            "<a href=\"{href_base}\" style=\"font-size:10px;color:{ORANGE};text-decoration:none;\
+            "<a href=\"{href_base}&months_ahead=12\" style=\"font-size:10px;color:{ORANGE};text-decoration:none;\
               display:block;text-align:right;margin-top:4px\">✕ clear filter</a>"
         )
     } else {
@@ -435,8 +497,12 @@ pub(crate) fn timeline_bar(
     format!(
         "<div class=\"card\" style=\"padding:12px 14px\">\
           <div style=\"font-size:10px;font-weight:600;color:{MID};margin-bottom:8px;\
-                      text-transform:uppercase;letter-spacing:.08em\">Events by month · click to filter</div>\
-          <div style=\"display:flex;gap:3px;align-items:flex-end;height:56px\">{bars}</div>\
+                      text-transform:uppercase;letter-spacing:.08em\">Events · next 12 months · click to filter</div>\
+          <div style=\"display:flex;gap:3px;align-items:flex-end;height:66px\">{bars}</div>\
+          <div style=\"display:flex;gap:12px;margin-top:6px;font-size:9px;color:{MID}\">\
+            <span style=\"display:flex;align-items:center;gap:4px\"><span style=\"width:9px;height:9px;border-radius:2px;background:{ORANGE}\"></span>confirmed</span>\
+            <span style=\"display:flex;align-items:center;gap:4px\"><span style=\"width:9px;height:9px;border-radius:2px;background:rgba(210,105,30,.22);border:1px dashed {ORANGE}\"></span>likely to repeat</span>\
+          </div>\
           <div id=\"bar-spin\" class=\"htmx-indicator\">loading…</div>\
           {clear_link}\
         </div>"

@@ -26,7 +26,7 @@ pub(crate) async fn zone_coming_up(
     //   612 = 6 months to a year out (excludes the next 6 months)
     //   999 = the next calendar year (Jan 1 - Dec 31)
     let today = Utc::now().date_naive();
-    let (from_date, to_date, sel_val) = match months_ahead.unwrap_or(6) {
+    let (from_date, to_date, sel_val) = match months_ahead.unwrap_or(12) {
         612 => (
             today.checked_add_months(Months::new(6)).unwrap_or(today),
             today.checked_add_months(Months::new(12)).unwrap_or(today),
@@ -66,15 +66,56 @@ pub(crate) async fn zone_coming_up(
         "from_date":    from_str,
         "to_date":      to_str,
         "event_type":   serde_json::Value::Null,
-        "country":      country_val,
+        "country":      country_val.clone(),
         "max_rows":     60,
     });
-    let data: serde_json::Value = match db.post_rpc("coming_up", &rpc_body).await {
+    // The list respects the selected window; the bar always shows a rolling
+    // 12 months so the forward year is always visible. Fetch both concurrently.
+    let bar_to = today.checked_add_months(Months::new(12)).unwrap_or(today);
+    let rpc_body_bar = serde_json::json!({
+        "input_lat":    serde_json::Value::Null,
+        "input_lng":    serde_json::Value::Null,
+        "radius_km":    serde_json::Value::Null,
+        "season":       serde_json::Value::Null,
+        "from_date":    today.format("%Y-%m-%d").to_string(),
+        "to_date":      bar_to.format("%Y-%m-%d").to_string(),
+        "event_type":   serde_json::Value::Null,
+        "country":      country_val.clone(),
+        "max_rows":     200,
+    });
+    let pred_country = if country.is_empty() {
+        String::new()
+    } else {
+        format!("&country=eq.{}", urlencoding::encode(country))
+    };
+    let predictions_url = format!(
+        "{}/rest/v1/event_predictions?select=predicted_date,confidence{pred_country}",
+        db.url
+    );
+    let (data_res, bar_res, pred_res) = tokio::join!(
+        db.post_rpc("coming_up", &rpc_body),
+        db.post_rpc("coming_up", &rpc_body_bar),
+        db.get_json::<Vec<PredictionRow>>(&predictions_url),
+    );
+    let data: serde_json::Value = match data_res {
         Ok(v) => v,
         Err(_) => {
             return (StatusCode::INTERNAL_SERVER_ERROR, "coming_up rpc failed").into_response()
         }
     };
+    let bar_dates: Vec<Option<String>> = bar_res
+        .ok()
+        .and_then(|v: serde_json::Value| v["events"].as_array().cloned())
+        .map(|arr| {
+            arr.iter()
+                .map(|e| {
+                    e.get("start_date")
+                        .and_then(|s| s.as_str())
+                        .map(|s| s.to_string())
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     let events: Vec<EventRow> = data["events"]
         .as_array()
         .map(|arr| {
@@ -105,13 +146,17 @@ pub(crate) async fn zone_coming_up(
         (612, "comingup.when.6to12"),
         (999, "comingup.when.year"),
     ];
-    let months_sel: String = months_opts
-        .iter()
-        .map(|(v, l)| {
-            let sel = if *v == sel_val { " selected" } else { "" };
-            format!("<option value=\"{v}\"{sel}>{}</option>", tl(l))
-        })
-        .collect();
+    let sel12 = if sel_val == 12 { " selected" } else { "" };
+    let mut months_sel = format!("<option value=\"12\"{sel12}>Next 12 months</option>");
+    months_sel.push_str(
+        &months_opts
+            .iter()
+            .map(|(v, l)| {
+                let sel = if *v == sel_val { " selected" } else { "" };
+                format!("<option value=\"{v}\"{sel}>{}</option>", tl(l))
+            })
+            .collect::<String>(),
+    );
 
     // Country groups
     let regions: &[(&str, &[&str])] = &[
@@ -166,11 +211,15 @@ pub(crate) async fn zone_coming_up(
     } else {
         esc(country)
     };
-    let month_label = months_opts
-        .iter()
-        .find(|(v, _)| *v == sel_val)
-        .map(|(_, l)| tl(l))
-        .unwrap_or_else(|| tl("comingup.when.6"));
+    let month_label = if sel_val == 12 {
+        "Next 12 months".to_string()
+    } else {
+        months_opts
+            .iter()
+            .find(|(v, _)| *v == sel_val)
+            .map(|(_, l)| tl(l))
+            .unwrap_or_else(|| tl("comingup.when.6"))
+    };
 
     // ── Monthly bar chart + optional month filter ───────────────
     let country_enc = if country.is_empty() {
@@ -178,15 +227,27 @@ pub(crate) async fn zone_coming_up(
     } else {
         format!("&event_country={}", urlencoding::encode(country))
     };
-    let bar_base = format!("/?zone=coming-up&months_ahead={sel_val}&lang={lang}{country_enc}");
+    let predictions: Vec<(Option<String>, f64)> = pred_res
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| {
+            let op = match p.confidence.as_deref() {
+                Some("high") => 0.42,
+                Some("medium") => 0.26,
+                _ => 0.16,
+            };
+            (p.predicted_date, op)
+        })
+        .collect();
+    let nav_base = format!("/?zone=coming-up&lang={lang}{country_enc}");
     let bar = timeline_bar(
-        &events
-            .iter()
-            .map(|e| e.start_date.clone())
-            .collect::<Vec<_>>(),
+        &bar_dates,
         month_filter,
-        &bar_base,
+        &nav_base,
         "#upcoming-results",
+        today.year(),
+        today.month(),
+        &predictions,
     );
 
     // Filter displayed events by selected month
