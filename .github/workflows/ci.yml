@@ -32,19 +32,22 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+      # bearings-frontend is the PARKED Phase-3 Leptos stub (see root Cargo.toml).
+      # It is excluded from CI so an unfinished crate does not gate every build
+      # or bias the open framework decision. Re-include it when that is settled.
       - name: cargo check
-        run: cargo check --workspace
+        run: cargo check --workspace --exclude bearings-frontend
 
       - name: cargo test (unit tests in src/ — no Supabase needed)
         # --lib runs #[cfg(test)] modules inside src/ only
         # Integration tests in tests/ are excluded here (need live Supabase)
-        run: cargo test --workspace --lib
+        run: cargo test --workspace --lib --exclude bearings-frontend
 
       - name: cargo clippy
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace --exclude bearings-frontend -- -D warnings
 
       - name: cargo fmt check
-        run: cargo fmt --all -- --check
+        run: cargo fmt -p bearings-shared -p bearings-backend -p bearings-agent -- --check
 
   build-release:
     name: Release Build
@@ -67,7 +70,7 @@ jobs:
           key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
 
       - name: cargo build --release
-        run: cargo build --release --workspace
+        run: cargo build --release --workspace --exclude bearings-frontend
 
       - name: Upload backend binary
         uses: actions/upload-artifact@v4
