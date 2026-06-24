@@ -4,3 +4,5 @@
 //! logic here is unit-testable against fakes.
 //!
 //!   routes  ->  services  ->  repositories  ->  db
+
+pub mod submission_service;
