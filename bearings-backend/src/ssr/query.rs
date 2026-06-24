@@ -426,7 +426,6 @@ mod tests {
     }
 }
 
-
 /// A candidate duplicate pair from the `event_dupe_candidates` view.
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct DupePairRow {
@@ -440,7 +439,6 @@ pub(crate) struct DupePairRow {
     pub date_b: Option<String>,
     pub sim: Option<String>,
 }
-
 
 /// A provenance-bearing artifact (photo/document) attached to an entity.
 #[derive(Debug, Clone, Deserialize)]
@@ -456,7 +454,6 @@ pub(crate) struct ArtifactRow {
     pub captured_on: Option<String>,
     pub image_url: Option<String>,
 }
-
 
 /// A predicted (shadow) recurrence from the `event_predictions` view.
 #[derive(Debug, Clone, Deserialize)]

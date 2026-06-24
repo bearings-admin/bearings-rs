@@ -60,7 +60,11 @@ pub(crate) async fn zone_admin(
             }
             "dup_ignore" => {
                 if let Some(other) = id2 {
-                    let (lo, hi) = if cid < other { (cid, other) } else { (other, cid) };
+                    let (lo, hi) = if cid < other {
+                        (cid, other)
+                    } else {
+                        (other, cid)
+                    };
                     let _ = db
                         .write_json(
                             reqwest::Method::POST,
@@ -84,7 +88,10 @@ pub(crate) async fn zone_admin(
         "{}/rest/v1/watched_feeds?active=eq.true&select=id,org_name,feed_type,last_fetched,fetch_errors&order=id.asc",
         db.url
     );
-    let dupes_url = format!("{}/rest/v1/event_dupe_candidates?select=*&limit=100", db.url);
+    let dupes_url = format!(
+        "{}/rest/v1/event_dupe_candidates?select=*&limit=100",
+        db.url
+    );
     let preds_url = format!(
         "{}/rest/v1/event_predictions?select=sample_name,city,country,predicted_date,confidence&order=predicted_date&limit=60",
         db.url

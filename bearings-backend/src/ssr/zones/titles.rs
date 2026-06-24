@@ -178,10 +178,10 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
                 .unwrap_or(&[]);
 
             let render_row = |h: &&TitleHolderRow| -> String {
-                let name   = esc(h.holder_name.as_str());
-                let year   = h.year.unwrap_or(0) as i64;
-                let hcity  = esc(h.city.as_deref().unwrap_or(""));
-                let hctry  = esc(h.country.as_deref().unwrap_or(""));
+                let name = esc(h.holder_name.as_str());
+                let year = h.year.unwrap_or(0) as i64;
+                let hcity = esc(h.city.as_deref().unwrap_or(""));
+                let hctry = esc(h.country.as_deref().unwrap_or(""));
                 let status = h.holder_status.as_deref().unwrap_or("");
                 let fs: Vec<String> = h.inclusion_flag_codes.clone().unwrap_or_default();
                 let loc = match (hcity, hctry) {
@@ -221,10 +221,8 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
             // First 12 inline; collapse the rest behind a pure-CSS "see more"
             // toggle that expands the remaining rows in place (no redirect).
             const VISIBLE: usize = 12;
-            let holder_rows: String =
-                comp_holders.iter().take(VISIBLE).map(|h| render_row(h)).collect();
-            let hidden_rows: String =
-                comp_holders.iter().skip(VISIBLE).map(|h| render_row(h)).collect();
+            let holder_rows: String = comp_holders.iter().take(VISIBLE).map(&render_row).collect();
+            let hidden_rows: String = comp_holders.iter().skip(VISIBLE).map(render_row).collect();
             let overflow = comp_holders.len().saturating_sub(VISIBLE);
 
             let more_note = if overflow > 0 {
@@ -250,7 +248,10 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
             }).unwrap_or_default();
 
             let artifact_h = build_artifacts(
-                artifacts_by_comp.get(&comp.id).map(|v| v.as_slice()).unwrap_or(&[]),
+                artifacts_by_comp
+                    .get(&comp.id)
+                    .map(|v| v.as_slice())
+                    .unwrap_or(&[]),
             );
 
             sections.push_str(&card(&format!(
@@ -292,7 +293,6 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
     ))
     .into_response()
 }
-
 
 /// Render artifact source-badges (pure-CSS expanders) for a competition card.
 fn build_artifacts(arts: &[ArtifactRow]) -> String {
