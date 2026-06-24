@@ -7,7 +7,7 @@ Aimed at a reviewer deciding whether the design choices were deliberate.
 
 ```
 HTTP ─▶ routes/         thin: parse request, map result → HTTP
-        services/       business logic (e.g. vote_service), depends on repo traits
+        services/       business-logic seam over repo traits (currently minimal)
         repositories/   data access; one trait + one Supabase impl per resource
         db.rs           SupabaseClient: get_json / post_rpc / write_json (+ TTL cache)
         ssr/ + ui.rs    server-rendered HTML zones, HTMX-enhanced
@@ -17,7 +17,7 @@ HTTP ─▶ routes/         thin: parse request, map result → HTTP
 ```
 
 - **Library + thin binary.** `lib.rs` owns the app and exposes `build_app(db) -> Router`; `main.rs` only wires env → config → serve. Integration tests in `tests/` import the library and drive a `TestServer` with no socket.
-- **Trait-based repositories (DIP).** Handlers depend on `EventRepository`, not on `SupabaseClient`. The vote logic is unit-tested against a `FakeVoteRepo` with no database.
+- **Trait-based repositories (DIP).** Read handlers depend on repository *traits* (e.g. `EventRepository`), not on `SupabaseClient`, so they can be unit-tested against fakes. (Write handlers — submissions, upvote, revival — still call the client directly; routing them through the repo layer too is a known cleanup.)
 - **One query chokepoint.** Every read goes through `SupabaseClient::get_json(url)`, so caching, timeouts, and error logging live in exactly one place. User-supplied filter values are percent-encoded in one place (`repositories::clause`), which closes PostgREST filter-injection.
 
 ## Measured performance
@@ -37,8 +37,10 @@ PostgREST hop. This single fact drives the decisions below.
 ## Decision: Axum (not Rocket)
 
 Axum sits directly on hyper + tower; we use the tower middleware stack (compression,
-tracing, CORS, and per-request timeouts). It benchmarks at lower overhead than
-Rocket, whose strength is ergonomic macros/guards rather than raw throughput.
+tracing, scoped CORS, and a request body-size limit). The Supabase HTTP client
+carries its own 5 s connect / 15 s request timeout (`db.rs`). Axum benchmarks at
+lower overhead than Rocket, whose strength is ergonomic macros/guards rather than
+raw throughput.
 
 But the honest reason to **not** relitigate this: at 0.3 ms of framework time
 against a ~45 ms network hop, the framework choice is performance-irrelevant here.
@@ -94,8 +96,7 @@ contention, `moka` drops in behind the same interface.
 ## Testing
 
 - `cargo test --lib` — unit tests, no network: `Zone::parse`, row deserialisation,
-  the `clause` injection guard, `esc` XSS guard, the TTL cache, and the full vote
-  logic via a fake repository.
+  the `clause` injection guard, `esc` XSS guard, and the TTL cache.
 - `cargo test --test api_tests` — HTTP integration tests against a `TestServer`
   (skip gracefully without `SUPABASE_URL`).
 
