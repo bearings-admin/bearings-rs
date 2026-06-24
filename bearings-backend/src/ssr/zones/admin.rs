@@ -93,7 +93,7 @@ pub(crate) async fn zone_admin(
         db.url
     );
     let preds_url = format!(
-        "{}/rest/v1/event_predictions?select=sample_name,city,country,predicted_date,confidence&order=predicted_date&limit=60",
+        "{}/rest/v1/event_predictions?select=sample_name,city,country,predicted_date,confidence,website&order=predicted_date&limit=60",
         db.url
     );
 
@@ -175,10 +175,16 @@ pub(crate) async fn zone_admin(
             let date = esc(p.predicted_date.as_deref().unwrap_or(""));
             let conf = esc(p.confidence.as_deref().unwrap_or(""));
             let badge = match p.confidence.as_deref() { Some("high") => ORANGE, _ => GOLD };
+            let site = esc(p.website.as_deref().unwrap_or(""));
+            let verify = if !site.is_empty() && site != "#" {
+                format!("<div style=\"margin-top:3px\"><a href=\"{site}\" target=\"_blank\" rel=\"noopener\" style=\"font-size:10px;color:{ORANGE}\">verify next date \u{2197}</a></div>")
+            } else {
+                String::new()
+            };
             card(&format!(
                 "<div style=\"display:flex;justify-content:space-between;align-items:center;gap:8px\">\
                    <div><div style=\"font-size:14px;font-weight:600\">{name}</div>\
-                     <div style=\"font-size:11px;color:{MID}\">{city} \u{00b7} likely ~ {date} \u{00b7} no confirmed edition yet</div></div>\
+                     <div style=\"font-size:11px;color:{MID}\">{city} \u{00b7} likely ~ {date} \u{00b7} no confirmed edition yet</div>{verify}</div>\
                    <span style=\"font-size:10px;color:#fff;background:{badge};border-radius:6px;padding:2px 7px;white-space:nowrap\">{conf}</span>\
                  </div>"
             ))
