@@ -20,17 +20,21 @@ dev:
     echo "Start backend: just backend"
     echo "Start agent:   just agent"
 
-# Build everything in release mode
+# Build everything in release mode (parked frontend excluded, matching CI)
 build:
-    cargo build --release --workspace
+    cargo build --release --workspace --exclude bearings-frontend
 
-# Run all tests
+# Run all tests (needs SUPABASE_* for the integration tests in tests/)
 test:
-    cargo test --workspace
+    cargo test --workspace --exclude bearings-frontend
+
+# Run only the unit tests in src/ — no network, mirrors CI
+test-unit:
+    cargo test --workspace --lib --exclude bearings-frontend
 
 # Check for compile errors without building
 check:
-    cargo check --workspace
+    cargo check --workspace --exclude bearings-frontend
 
 # Format all code
 fmt:
@@ -38,7 +42,7 @@ fmt:
 
 # Run clippy linter — Gaspar will appreciate this
 lint:
-    cargo clippy --workspace -- -D warnings
+    cargo clippy --workspace --exclude bearings-frontend -- -D warnings
 
 # Check for dependency vulnerabilities
 audit:
@@ -52,16 +56,17 @@ clean:
 docs:
     cargo doc --workspace --no-deps --open
 
-# SSH deploy to VPS (set VPS_HOST env var)
+# Deploy: run deploy.sh ON the VPS (pull main → build → restart). The VPS is
+# deploy-only; merge to main via PR first. Override host with VPS_HOST.
 deploy:
-    ./deploy.sh
+    ssh root@${VPS_HOST:-srv1744879.hstgr.cloud} 'cd /opt/bearings-rs && ./deploy.sh'
 
 # Check VPS service status
 status:
-    ssh ${VPS_USER:-bearings}@${VPS_HOST:?VPS_HOST required} \
-        "sudo systemctl status bearings-backend bearings-agent --no-pager"
+    ssh root@${VPS_HOST:-srv1744879.hstgr.cloud} \
+        "systemctl status bearings-backend --no-pager"
 
 # Tail VPS logs
 logs:
-    ssh ${VPS_USER:-bearings}@${VPS_HOST:?VPS_HOST required} \
-        "sudo journalctl -u bearings-backend -u bearings-agent -f"
+    ssh root@${VPS_HOST:-srv1744879.hstgr.cloud} \
+        "journalctl -u bearings-backend -f"

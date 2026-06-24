@@ -2,20 +2,24 @@
 
 **Global bear community hub.** Events, venues, clubs, title holders, and more — worldwide.
 
-Live: `https://www.bearings.community` (currently at `https://srv750649.hstgr.cloud`)
+Live: `https://srv1744879.hstgr.cloud` (custom domain `bearings.community` not yet assigned)
 
 ---
 
 ## What this is
 
-Bearings is a Rust monorepo with three active crates and one pending:
+Bearings is a Rust monorepo with three active crates and one parked:
 
 | Crate | Role | Status |
 |-------|------|--------|
 | `bearings-shared` | Typed database models — shared across all crates | ✅ Active |
 | `bearings-backend` | Axum HTTP server — SSR + REST API | ✅ Active |
 | `bearings-agent` | Data pipeline — RSS/iCal feed ingestion | ✅ Active |
-| `bearings-frontend` | Leptos SSR + WASM frontend | 🔧 Phase 3 |
+| `bearings-frontend` | Rust→WASM frontend scaffold | ⏸ Parked — framework undecided (see below) |
+
+> The frontend stub is **parked**: excluded from the default build and CI so it doesn't
+> gate work or bias the open framework decision. It stays a workspace member, so
+> `cargo build -p bearings-frontend` still works. See "Frontend (undecided)" below.
 
 ---
 
@@ -29,13 +33,17 @@ cd bearings-rs
 cp .env.example .env
 # Edit .env — needs SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, ADMIN_TOKEN
 
-# Run the backend
+# Run the backend (the parked frontend crate is skipped by default)
 cargo run -p bearings-backend
 
 # Visit http://localhost:3000
 ```
 
 The backend talks directly to Supabase via its REST API. No local database needed.
+
+**Contributing:** `main` is the single source of truth and the VPS is deploy-only — work on a
+branch, open a PR, and let CI merge it (no manual approval needed). See **`CONTRIBUTING.md`**.
+A `justfile` wraps the common commands (`just backend`, `just test`, `just lint`, `just deploy`).
 
 ---
 
@@ -48,7 +56,8 @@ The single source of truth for the database schema in Rust. Every crate imports 
 ```
 bearings-shared/src/
   models.rs   — Event, Place, Club, TitleHolder, Competition, Campaign, ...
-  enums.rs    — EventType, PlaceType, PlaceType, ProposalStatus, ...
+  enums.rs    — EventType, PlaceType, ProposalStatus, ... (defined; models.rs still
+                uses raw String fields — wiring the enums in is an open decision)
 ```
 
 **If you touch the Supabase schema, update `models.rs` first.**
@@ -59,7 +68,9 @@ An Axum server. Two parallel sets of handlers:
 
 ```
 src/
-  main.rs            — router, port binding, middleware
+  lib.rs             — build_app() (router + middleware) + all module decls
+  main.rs            — thin binary: env → config → bind port → serve
+  config.rs          — env vars, validated at startup
   db.rs              — SupabaseClient (thin wrapper over reqwest)
   ui.rs              — design system: colour constants + HTML helpers
   mcp.rs             read-only MCP server (POST /mcp, JSON-RPC over HTTP)
@@ -103,34 +114,37 @@ client:
 claude mcp add --transport http bearings https://srv1744879.hstgr.cloud/mcp
 ```
 
-### bearings-frontend (Phase 3)
+### bearings-frontend (parked — framework undecided)
 
-The Leptos frontend is stubbed out and ready for activation:
+A Rust→WASM frontend scaffold exists but is **parked**. It was scaffolded with **Leptos**,
+but the framework choice is **not settled** — see "Frontend (undecided)" below. It's excluded
+from the default build and CI so it doesn't gate work or bias that decision.
 
 ```
 bearings-frontend/src/
   lib.rs                 — App component, Shell, Nav
   components/
-    now.rs               — NowPage + EventCard (server function wired to /api/now)
+    now.rs               — NowPage + EventCard (calls /api/now)
     coming_up.rs         — ComingUpPage placeholder
 ```
 
-The server functions in `now.rs` call the same Supabase REST API that `ssr/zones/now.rs` uses.
-Phase 3 is: wire up the remaining server functions → activate hydration → deprecate `ssr/`.
+Whatever framework is chosen, it will **consume the existing typed JSON API in `routes/`** and
+**keep SSR-for-crawlers** (the `/llms.txt` + SSR HTML are a core differentiator).
 
 ---
 
-## The migration path (SSR → Leptos)
+## The migration path (current → richer frontend)
 
 ```
 Phase 1 (done): Axum SSR — zone functions return Html<String>
 Phase 2 (done): Type safety — Zone enum, typed models, bearings-shared
-Phase 3 (next): Leptos SSR — replace zone functions with Leptos components
-Phase 4:        WASM hydration — add wasm32-unknown-unknown target, cargo-leptos
+Phase 3 (open): Reactive frontend — framework UNDECIDED (Leptos vs Yew vs stay-HTMX)
+Phase 4:        WASM hydration — once a framework is chosen
 ```
 
-Each `ssr/zones/X.rs` maps to a Leptos component in `bearings-frontend/src/components/X.rs`.
-The JSON API in `routes/` is what the Leptos components will call.
+Today the live UI is **Axum SSR + HTMX** (no WASM) — fast and crawlable. A richer reactive
+frontend is Phase 3, but the framework is an open call (see below). Whatever it is, it consumes
+the JSON API in `routes/`.
 
 ---
 
@@ -198,36 +212,34 @@ See `RESEARCH_DIRECTIVE.md` for the full tiered data collection strategy.
 
 ## Deployment
 
-Single binary on a Hostinger VPS (`srv750649.hstgr.cloud`):
+The VPS (`srv1744879.hstgr.cloud`) is **deploy-only** — never hand-edited. It holds a checkout
+at `/opt/bearings-rs` that is kept in sync with GitHub `main`. To ship a merged change, run the
+deploy script **on the VPS**:
 
 ```bash
-# Build release binary
-cargo build -p bearings-backend --release
-
-# Copy to VPS
-scp target/release/bearings-backend user@vps:/opt/bearings-rs/bearings-backend.bin
-
-# Restart service
-ssh user@vps systemctl restart bearings-backend
+ssh root@srv1744879.hstgr.cloud
+cd /opt/bearings-rs && ./deploy.sh
 ```
 
-Systemd service: `bearings-backend.service`  
-TLS: Let's Encrypt via Hostinger auto-provisioning (expires Aug 2026)
+`deploy.sh` fetches `origin/main`, hard-resets the checkout, `cargo build --release -p
+bearings-backend`, restarts the service, and health-checks it. Develop on a branch and let CI
+merge the PR first (see `CONTRIBUTING.md`); deploy reflects whatever is on `main`.
+
+Systemd service: `bearings-backend.service`
+TLS: **Caddy** reverse proxy + Let's Encrypt → `localhost:3000`.
 
 ---
 
-## Frontend decision
+## Frontend (undecided)
 
-The frontend crate uses **Leptos 0.6** (SSR feature, no WASM compilation required initially).
+The reactive frontend framework is an **open decision** — it has **not** been settled:
 
-Leptos was chosen because it follows the same component model as Yew but with:
-- Fine-grained signals instead of virtual DOM diffing
-- `leptos_axum` for first-class Axum integration
-- Better server function support (typed, async, serialized via serde)
+- **Stay SSR + HTMX** — what ships today; zero new toolchain, great for crawlers. Ceiling on rich interactivity.
+- **Leptos** — what the parked stub was scaffolded with; modern, strong SSR+hydration story.
+- **Yew** — a different Rust→WASM framework (the maintainer's day-to-day stack).
 
-To activate the full WASM hydration pipeline:
-```bash
-rustup target add wasm32-unknown-unknown
-cargo install cargo-leptos
-cargo leptos build
-```
+The stub currently uses Leptos 0.6 crates, but that is **not** a commitment — it's parked
+precisely so it doesn't pre-empt this call. Hard constraints for whatever wins: **keep
+SSR-for-crawlers** (`/llms.txt` + SSR HTML), **reuse `bearings-shared` + the REST API**, and
+honour the design system / i18n. Full context and the decision brief live in
+**`FRONTEND_BRIEF.md`**.

@@ -159,7 +159,7 @@ impl SupabaseClient {
     }
 
     /// Fire-and-forget write (PATCH/POST) with no response body. Used by the
-    /// vote service to update proposal status.
+    /// admin zone (`ssr/zones/admin.rs`) for feed/candidate updates.
     pub async fn write_json<B: serde::Serialize>(
         &self,
         method: reqwest::Method,
