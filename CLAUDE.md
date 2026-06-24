@@ -66,7 +66,7 @@ src/
                      events, clubs, titles, creators, campaigns, ical, digital, admin)
   repositories/    — data access: trait + Supabase impl per resource (DIP);
                      clause() percent-encodes filter values. 14 repos.
-  services/        — business logic; vote_service orchestrates voting
+  services/        — business-logic seam over repo traits (currently minimal)
   routes/          — thin JSON REST handlers; delegate to repositories
 tests/
   api_tests.rs     — HTTP integration tests (axum-test) against build_app()

@@ -26,11 +26,13 @@ pub mod ssr;
 pub mod ui;
 
 use axum::{
+    extract::DefaultBodyLimit,
+    http::Method,
     routing::{get, post},
     Router,
 };
 use tower_http::compression::CompressionLayer;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
 /// Construct the Axum router with all routes and middleware wired in.
@@ -118,7 +120,20 @@ pub fn build_app(db: db::SupabaseClient) -> Router {
         // ── Utility ─────────────────────────────────────────────
         .route("/health", get(health))
         // ── Middleware ──────────────────────────────────────────
-        .layer(CorsLayer::permissive())
+        // CORS: any origin may *read* the public API (agent/MCP discoverability is
+        // a core goal), but cross-origin writes are not allowed — browsers block
+        // cross-site POSTs because POST isn't in the allowed methods. The site's own
+        // HTMX POSTs are same-origin and unaffected; non-browser MCP/agent clients
+        // don't enforce CORS, so they're unaffected too.
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods([Method::GET, Method::HEAD, Method::OPTIONS])
+                .allow_headers(Any),
+        )
+        // Cap request bodies so an oversized POST (submissions / MCP) can't exhaust
+        // memory. Generous for JSON intake; tighten via config later if needed.
+        .layer(DefaultBodyLimit::max(256 * 1024))
         .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())
         .with_state(db)
