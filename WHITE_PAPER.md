@@ -1,6 +1,10 @@
 # Bearings White Paper
 
-**Version:** 0.10  **Date:** June 2026  **Status:** Current — governance model under active discussion
+**Version:** 0.11  **Date:** 2026-06-25  **Status:** Current — governance model under active discussion
+
+*Revision history is preserved in git. v0.11 adds the Agent Team (§7) and the
+recurrence-forecast / keeper work; v0.10 retired the Cardano governance + treasury in
+favour of the manual Base/USDC model.*
 
 Bearings is global infrastructure for the gay bear community: a verified, living
 directory and coordination layer for events, places, clubs, title holders,
@@ -28,10 +32,13 @@ extraction, all affiliate relationships disclosed.
 Four zones on a temporal spine:
 
 - **Archive** — community memory since 1987. Decade tabs, title-holder lineage by
-  competition, oral histories.
+  competition, oral histories, a “Gone but not forgotten” memorial for closed venues,
+  and primary-source **artifacts** (e.g. a photographed title-holder plaque) attached to records.
 - **Now** — what's happening today: hot events, current title holders, live campaigns.
-- **Coming Up** — the default landing. A 6–24 month trip planner; monthly bar chart
-  filters by click; country dropdown; iCal export.
+- **Coming Up** — the default landing. A **rolling 12-month** trip planner; the monthly
+  bar chart shows confirmed events plus translucent **“likely to repeat” shadow bars**
+  from a recurrence engine, with tentative listings for the predicted dates; click-to-filter;
+  country dropdown; iCal export.
 - **Future** — active campaigns (progress bars), recent milestones (Breaking Ground),
   new bear territories (with ILGA safety context), and community-upvoted ideas.
 
@@ -46,10 +53,10 @@ Digital Spaces, plus two creator-facing zones — **Creators**, grouped by craft
 their books; and **Shops**, bear-owned shops and community gear, kept a separate zone
 so commerce never crowds the directory.
 
-**Data as of June 2026:** 88 events, 173 places (saunas, bars, campgrounds, leather
-bars), 49 clubs, 28 competitions, 154 title holders, 52 history entries, 49 creators
-(incl. international DJs and authors), 21 bear shops, 11 books, 35 digital spaces,
-13 campaigns, 10 in-language bear-region profiles, ~1,190 translation rows across
+**Data as of 2026-06:** 95 events, 186 places (saunas, bars, campgrounds, leather
+bars), 51 clubs, 28 competitions, 160 title holders, 59 history entries, 53 creators
+(incl. international DJs and authors), 21 bear shops, 11 books, 36 digital spaces,
+14 campaigns, 10 in-language bear-region profiles, ~1,190 translation rows across
 four baked languages (EN/ES/FR/JA).
 
 ---
@@ -135,12 +142,41 @@ then they are ordinary product links.
 Real-time scraping during page renders has been retired (it caused IP blocks). The
 approach now: official APIs first (Eventbrite, Meetup, iCal feeds), a nightly cron on
 the VPS (systemd timer), local validation before insert, and community submission via
-the chatbot intake and the `submissions` table. Dedup before every insert; never
-insert a record without a source.
+the agent intake and the `submissions` table. Dedup (trigram series-keying) before
+every insert; never insert a record without a source.
+
+Corrections and additions are **bot-fed, never raw UGC** — they flow through a
+conversational agent that turns a chat into a structured, reviewable diff (steward- or
+check-approved). A **recurrence forecast** turns the directory's own history into a
+prioritised worklist: series seen in ≥2 years are projected forward and handed to the
+keeper agent (§7) to confirm against official sites.
 
 ---
 
-## §7 Technical Stack
+## §7 Agent Team
+
+Bearings is being built as an **agent-operated commons**. As of 2026-06-25 the first AI
+agent is live; the rest are planned. Operating principles: agents **propose, never
+insert** (every change is a structured, reviewable diff the steward approves — CONST-9);
+**tiered escalation** (cheap models do the high-volume work, a more capable model only
+the hard or hard-to-reverse cases); and **deterministic where possible** (feed parsing
+and applying an approved diff use no model at all).
+
+**Live:** the *feed reader* (deterministic nightly cron) and the *keeper* — a
+forecast-confirmation agent (Anthropic API, Haiku) that runs weekly, reads the
+recurrence forecast, fetches each series' official site, checks whether the next
+edition's dates are announced, and queues confirmations into the admin review queue for
+one-click approval. **Planned:** triage/router (Haiku), conversational intake (Sonnet),
+proposal drafting (Sonnet; Opus for high-stakes), and code-authoring/commit (Opus). The
+sibling **Forage** project (a bear travel agent) reads Bearings read-only.
+
+Keys live only in the VPS `.env`; agents run as systemd one-shots. No agent is a
+persistent process that acts without either the admin queue + steward or a live coding
+session.
+
+---
+
+## §8 Technical Stack
 
 **Phase 1 (retired):** a Lovable React prototype over Supabase PostgreSQL — the
 original rapid-start UI, since superseded by Phase 2.
@@ -175,9 +211,13 @@ routes / ssr  →  services  →  repositories  →  db (Supabase PostgREST)
   exposes the directory to AI agents as JSON-RPC tools, alongside `llms.txt` — so the
   data is consumable by agents, not just humans.
 
-Supporting crates: `bearings-shared` (typed models), `bearings-agent` (treasury
-monitor and Bluesky publishing stubs), and `bearings-frontend` (a Leptos skeleton for
-the Phase 3 interactive frontend).
+Supporting crates: `bearings-shared` (typed models), `bearings-agent` (research /
+Bluesky-publishing stubs), and `bearings-frontend` (a parked Leptos skeleton for the
+Phase 3 interactive frontend; the framework choice — Leptos vs Yew vs stay-HTMX — is
+open). The live automation runs as Python services on the VPS via systemd timers —
+`feed_reader.py` (nightly) and `keeper.py` (weekly; see §7). GitHub `main` is the single
+source of truth; the VPS is deploy-only (branch → PR → CI-gated auto-merge →
+`deploy.sh`).
 
 Design decisions and benchmarks — including Axum vs Rocket, PostgREST vs a direct
 `sqlx` connection, and HTMX vs a WASM SPA — are documented in
@@ -185,7 +225,7 @@ Design decisions and benchmarks — including Axum vs Rocket, PostgREST vs a dir
 
 ---
 
-## §8 Bear Future Zone
+## §9 Bear Future Zone
 
 Four live sections: **Bears Taking Action** (campaigns with progress bars),
 **Breaking Ground** (recent title holders, including historic firsts), **New Bear
@@ -196,7 +236,7 @@ languages — researched in-language, each with a source.
 
 ---
 
-## §9 Portability
+## §10 Portability
 
 No vendor lock-in. The database is standard PostgreSQL — "Supabase" is a managed
 Postgres plus a REST layer (PostgREST), and the backend uses none of Supabase's
@@ -212,7 +252,7 @@ The data itself is kept out of the repository by design.
 
 ---
 
-## §10 Constitutional Values
+## §11 Constitutional Values
 
 Ten values (CONST-1…10) govern the project and require a 75% supermajority to amend:
 community-memory-first, no single point of human failure, lightweight governance,
