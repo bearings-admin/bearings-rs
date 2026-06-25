@@ -19,15 +19,17 @@ at `/?zone=admin&token=<ADMIN_TOKEN>`.
 
 | Feed | Type | URL | Scope | Notes |
 |---|---|---|---|---|
-| Bear World Magazine | `rss` | https://bearworldmag.com/feed/ | Global | Keyword-filtered |
 | The Bear Calendar | `ical` | https://thebearcalendar.com/events/list/?ical=1 | Global | All events pass |
 | Amsterdam Bear Pride | `ical` | https://amsterdambearpride.com/en/events/?ical=1 | Netherlands | All events pass |
-| Bear Naked Club Chicago | `ical` | https://bearnaked.club/events/list/?ical=1 | Chicago | All events pass |
-| SF Eagle | `ical` | https://sf-eagle.com/events/list/?ical=1 | San Francisco | All events pass |
-| SF Leather & LGBTQ District | `ical` | https://sfleatherdistrict.org/events/month/?ical=1 | San Francisco | Mixed LGBTQ |
+| Bear Naked Club Chicago | `ical` | https://bearnaked.club/events/list/?ical=1 | Chicago | Mixed — title filter recommended |
 | London Leathermen | `ical` | (Google Calendar public .ics) | London | All events pass |
 | XL Bears Seattle | `ical` | (Google Calendar public .ics) | Seattle | All events pass |
 | Bear Carnival Gran Canaria | `ical-static` | (annual .ics file) | Gran Canaria | Annual URL refresh needed |
+| Ottawa Bears | `ical` | (Google Calendar public .ics) | Ottawa | **Keyword-filtered** (`title_filter`); calendar currently stale |
+
+**Retired / deactivated** (kept in `watched_feeds` with `active = false`): Bear World
+Magazine (Cloudflare 503 blocks the VPS IP), SF Eagle & SF Leather District (re-queued
+non-bear clutter), Leather Archives & Museum, and the never-built `scrape`-type sources.
 
 ### Feed reader behaviour
 - ETag / Last-Modified conditional requests — feeds that haven't changed return 304
@@ -35,6 +37,10 @@ at `/?zone=admin&token=<ADMIN_TOKEN>`.
 - Duplicate URLs silently skipped (`source_url` UNIQUE constraint)
 - `parsed_start` / `parsed_end` extracted from iCal DTSTART/DTEND
 - Country hinted from title + description + location text
+- **Per-feed `title_filter`** (comma-separated keywords): mixed community calendars
+  import only items whose title matches — e.g. the Ottawa Bears Google Calendar.
+- **Lifecycle sweep** (same nightly run): events whose date has passed are archived
+  (`active = false`, retained as recurrence history); predicted repeats are logged.
 - `feed_reader.py` must be run with env vars from `/opt/bearings-rs/.env`
 
 ### Annual maintenance — `ical-static` feeds
@@ -43,6 +49,25 @@ Each January, an agent should:
 2. For each, visit the organisation's website and find the new year's programme file URL
 3. PATCH the record with the new URL and reset `last_etag`, `last_modified` to NULL
 4. Confirm by running `feed_reader.py` manually
+
+---
+
+## Keeper Agent — Forecast Confirmation (Weekly Cron)
+
+Runs weekly (Mondays 03:30 UTC) via `bearings-keeper.timer` →
+`/opt/bearings-rs/scripts/keeper.py`. The first AI agent (Anthropic API; model via
+`KEEPER_MODEL` in `.env`, default Haiku). It **proposes, never inserts.**
+
+What it does: reads the recurrence forecast (`event_predictions` — series seen in ≥2
+years, projected forward), fetches each series' official website, and asks Claude
+whether the next edition's dates have been announced. Confirmations are queued into
+`candidate_events` (`status = 'pending'`) for one-click steward approval — the same
+review queue as the feeds.
+
+**Its directive is a repo file, not hardcoded:** `directives/keeper.md` is the prompt
+the keeper sends (with per-event substitutions). Edit the directive there to tune the
+agent; the doc is the behaviour. This is the pattern for future agents — each gets a
+`directives/<name>.md`, loaded at runtime, version-controlled, deployed to the VPS.
 
 ---
 
@@ -136,6 +161,7 @@ Known organiser IDs to check manually post-event for title results and future da
 | Job | Schedule | What it does |
 |---|---|---|
 | `bearings-feeds.timer` | Nightly 02:00 UTC | RSS + iCal feeds → candidate_events |
+| `bearings-keeper.timer` | Weekly Mon 03:30 UTC | Confirm forecasted dates from official sites → candidate_events |
 | Annual iCal-static refresh | Every January (agent task) | Update ical-static URLs for new year |
 | Tier 2 scrape (future) | Monthly/quarterly | bearevents.eu, gaytravel4u — not yet live |
 | Title holder check (agent) | Post-contest | Search + PATCH title_holders via Supabase REST |
