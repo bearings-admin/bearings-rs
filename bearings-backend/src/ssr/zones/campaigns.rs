@@ -72,6 +72,19 @@ pub(crate) async fn zone_campaigns(db: SupabaseClient, lang: &str) -> Response {
         .get_json::<Vec<CampaignRow>>(&url)
         .await
         .or_log("campaigns");
+    let impact: Option<CharityImpactRow> = db
+        .get_json::<Vec<CharityImpactRow>>(&format!("{}/rest/v1/charity_impact?select=*", db.url))
+        .await
+        .or_log("campaigns:impact")
+        .into_iter()
+        .next();
+    let lineages: Vec<CharityLineageRow> = db
+        .get_json::<Vec<CharityLineageRow>>(&format!(
+            "{}/rest/v1/charity_lineage?people=gte.2&select=*&order=last_year.desc,people.desc",
+            db.url
+        ))
+        .await
+        .or_log("campaigns:lineage");
 
     let (give, ongoing): (Vec<&CampaignRow>, Vec<&CampaignRow>) = campaigns
         .iter()
@@ -93,6 +106,60 @@ pub(crate) async fn zone_campaigns(db: SupabaseClient, lang: &str) -> Response {
         body.push_str(&sh("Community funds & ongoing giving", Some(ongoing.len())));
         body.push_str(&format!("<p style=\"font-size:11px;color:{MID};margin:-2px 0 8px\">These give through events/tickets or have no one-click donation yet \u{2014} follow the link to support them.</p>"));
         body.push_str(&render(&ongoing));
+    }
+
+    // ── The Impact — retrospective / history ──────────────────
+    if let Some(im) = impact.as_ref() {
+        let raised = im.total_raised.unwrap_or(0);
+        let money = if raised >= 1_000_000 {
+            format!("${:.1}M+", raised as f64 / 1_000_000.0)
+        } else if raised >= 1_000 {
+            format!("${}k+", raised / 1_000)
+        } else {
+            format!("${raised}")
+        };
+        let stat = |big: &str, label: &str| -> String {
+            format!(
+                "<div style=\"flex:1;min-width:110px;background:#f3eee3;border-radius:12px;\
+                   padding:12px 14px;text-align:center\">\
+                   <div style=\"font-size:22px;font-weight:700;color:{BROWN}\">{big}</div>\
+                   <div style=\"font-size:11px;color:{MID};margin-top:3px\">{label}</div></div>"
+            )
+        };
+        body.push_str(&sh("The impact \u{2014} carried across the years", None));
+        body.push_str(&format!(
+            "<p style=\"font-size:12px;color:{MID};margin:-2px 0 10px;line-height:1.5\">What the bear \
+             community has quietly built: flagship event funds across decades, and causes the title \
+             circuit has carried sash to sash.</p>"
+        ));
+        body.push_str(&format!(
+            "<div style=\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px\">{}{}{}</div>",
+            stat(&money, "raised for community causes"),
+            stat(&im.causes.unwrap_or(0).to_string(), "causes championed"),
+            stat(&im.pledges.unwrap_or(0).to_string(), "titleholder pledges"),
+        ));
+    }
+    if !lineages.is_empty() {
+        body.push_str(&format!(
+            "<div style=\"font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;\
+               color:{BROWN};margin:4px 0 8px\">Causes carried sash to sash</div>"
+        ));
+        for l in &lineages {
+            let cause = esc(l.cause.as_deref().unwrap_or(""));
+            let comp = esc(l.competition.as_deref().unwrap_or(""));
+            let names = esc(l.names.as_deref().unwrap_or(""));
+            let people = l.people.unwrap_or(0);
+            let span = match (l.first_year, l.last_year) {
+                (Some(a), Some(b)) if a != b => format!("{a}\u{2013}{b}"),
+                (Some(a), _) => a.to_string(),
+                _ => String::new(),
+            };
+            body.push_str(&card(&format!(
+                "<div><div style=\"font-weight:600;font-size:14px;color:{BROWN};line-height:1.3\">{cause}</div>\
+                 <div style=\"font-size:11px;color:{MID};margin-top:2px\">{comp} \u{00b7} {people} titleholders \u{00b7} {span}</div>\
+                 <div style=\"font-size:12px;color:{DARK};margin-top:6px;line-height:1.5\">{names}</div></div>"
+            )));
+        }
     }
 
     Html(shell(

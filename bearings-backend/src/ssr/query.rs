@@ -469,3 +469,22 @@ pub(crate) struct PredictionRow {
     pub country: Option<String>,
     pub website: Option<String>,
 }
+
+/// Headline charity-impact numbers (`charity_impact` view).
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct CharityImpactRow {
+    pub total_raised: Option<i64>,
+    pub causes: Option<i64>,
+    pub pledges: Option<i64>,
+}
+
+/// A cause carried by the title circuit across years (`charity_lineage` view).
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct CharityLineageRow {
+    pub cause: Option<String>,
+    pub competition: Option<String>,
+    pub people: Option<i64>,
+    pub first_year: Option<i64>,
+    pub last_year: Option<i64>,
+    pub names: Option<String>,
+}
