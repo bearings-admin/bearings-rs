@@ -14,6 +14,14 @@ club / competition sources. The keeper **proposes, never inserts** — every fin
 a review queue for one-click steward approval, exactly like the forecast-confirmation
 mission.
 
+**Scope (set 2026-06-25):** the mission has two explicit jobs —
+1. **Establish missing clubs/titles** — countries/titles that have a known bear titleholder
+   contest but are absent from the directory (the "Mr. Bears International" 3/2017 artifact
+   alone surfaced 11 — see First Worklist below).
+2. **Backfill every existing lineage to at least 2017** — close the gap between each title's
+   earliest row we hold and 2017 (go earlier where the source allows). 2017 is the floor,
+   not the target.
+
 ## Why this exists (the Belgium lesson)
 
 A lineage can look *complete* in our data and still be missing a decade. We held only
@@ -43,6 +51,7 @@ WHERE year IS NOT NULL
 GROUP BY title_name
 HAVING ((max(year)-min(year)+1) - count(DISTINCT year)) > 0   -- interior gaps
     OR (max(year) >= 2024 AND count(*) <= 3)                  -- recent-only => suspect truncation
+    OR min(year) > 2017                                       -- doesn't reach the 2017 floor
 ORDER BY interior_gaps DESC, rows ASC;
 ```
 
@@ -64,6 +73,11 @@ ORDER BY interior_gaps DESC, rows ASC;
 - **Source required** — every proposal carries the source URL in `bio`/notes.
 - **First-name-only** is common on older Hall-of-Fame entries — queue it anyway, but set a
   `needs_surname` flag so the steward knows a second source is needed. Don't invent surnames.
+- **Mid-year rosters map to the *preceding* election year.** A "reigning titleholders"
+  graphic/list dated partway through a year (e.g. the 3/2017 artifact) shows whoever was
+  *reigning then* — for titles crowned later in the year that is the **prior year's** winner.
+  Cross-check against any holder we already have for the same year before assigning a year.
+  (Proven: the 3/2017 artifact showed "Geoffey" for France, but 2017 = Franck → Geoffrey was 2016.)
 - **Gap records over guesses** — if a year is genuinely blank at the source, propose
   `holder_status='unknown'`, `holder_name='Unknown — name not in public record'`. Never guess.
 - **Privacy (CONST-6)** — a holder tied to a criminalised country: `privacy_mode`, no detail
@@ -71,6 +85,17 @@ ORDER BY interior_gaps DESC, rows ASC;
 - **Never write `title_holders` directly.** Proposals only.
 - **Don't delete or overwrite** an existing holder row — propose additions/corrections as a
   reviewable diff (extends CONST-9: bot-fed, never raw UGC).
+
+## First worklist (seeded by artifact #2 — "Mr. Bears International" 3/2017)
+
+On 2026-06-25 the steward backfilled 29 rows from this artifact + the Belgium Hall of Fame
+(see memory `project_titleholder_backfill_2017`). That established a 2017 anchor for many
+titles; the mission's first job is to **extend each of these from its 2017 anchor toward the
+present and back toward the title's founding**, and to **add surnames** to the 29 first-name
+rows (`bio ILIKE '%surname pending%'`). Newly-established country titles needing full
+lineages: **Austria, Sweden, Spain/Sitges, Slovenia, Portugal (Lisbon), Hungary, Italy,
+Chile, Colombia, Mexico, Venezuela.** Also still thin and worth a source pass: Poland
+(`mrbearpoland.eu` Hall of Fame, incl. a Vice lineage), Montréal, France.
 
 ## Proven yield (hand-check, 2026-06-25)
 
