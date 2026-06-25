@@ -160,6 +160,31 @@ Gaspar's primary work will be the Leptos frontend (`bearings-frontend`). The Axu
 
 ---
 
+## Agents & Automation
+
+Two automated workers run on the VPS as systemd timers (full detail in `RESEARCH_DIRECTIVE.md`):
+- **`feed_reader.py`** (nightly, `bearings-feeds.timer`) — deterministic: RSS/iCal feeds
+  (per-feed `title_filter`) → `candidate_events` (pending); plus a lifecycle sweep that
+  archives past events (retained as recurrence history) and logs predicted repeats.
+- **`keeper.py`** (weekly, `bearings-keeper.timer`) — the first AI agent (Anthropic API,
+  `KEEPER_MODEL` in `.env`, default `claude-haiku-4-5`). Reads the recurrence forecast,
+  checks each series' official site, and queues confirmed dates into `candidate_events`
+  for one-click approval. **Proposes, never inserts.** Its prompt is the repo file
+  `directives/keeper.md`, loaded at runtime — edit the directive there, not the code.
+
+**Agent directives live in the repo** (`directives/*.md`) so they deploy to the VPS and
+the crons can read them — GitHub and the deploy checkout are identical by design
+(`deploy.sh` resets to `origin/main`). As more agents arrive, each gets its own
+`directives/<name>.md`.
+
+The Coming Up zone runs a **recurrence forecast**: `bearings_series_key()` plus the
+`event_series` / `event_predictions` views project annual events forward as translucent
+shadow bars + tentative listings; the keeper confirms them, and confirmations enrich on
+approval (start/end/city). Model-tier guidance per agent is the steward's, kept outside
+the repo.
+
+---
+
 ## Research Principles
 
 - **Official APIs first:** Eventbrite API, Meetup API, iCal feed parsing (nightly cron on VPS via systemd timer)

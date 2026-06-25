@@ -36,6 +36,16 @@ ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
 MODEL = os.environ.get("KEEPER_MODEL", "claude-opus-4-8")
 UA = "Bearings-Keeper/1.0 (+https://bearings.community)"
 
+# The keeper's prompt is a repo file, not hardcoded — edit directives/keeper.md to tune
+# the agent (the doc is the behaviour). Everything after the first '---' is the template
+# sent to Claude, with per-event tokens substituted in check().
+_DIRECTIVE_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "directives", "keeper.md"
+)
+PROMPT_TEMPLATE = (
+    open(_DIRECTIVE_PATH, encoding="utf-8").read().split("\n---\n", 1)[-1].strip()
+)
+
 
 def supa_get(path):
     req = Request(
@@ -127,13 +137,10 @@ def check(pred):
     except Exception as e:
         return {"error": str(e)}
     prompt = (
-        f'You verify bear-event dates for a community directory. Event: "{name}" in {city}. '
-        f"Using ONLY the website text below, determine whether the {year} edition's dates are "
-        f"announced. Do not guess or use prior knowledge.\n\n"
-        f"Respond with ONLY a JSON object, no prose:\n"
-        f'{{"announced": true|false, "start_date": "YYYY-MM-DD or empty", '
-        f'"end_date": "YYYY-MM-DD or empty", "evidence": "short quote from the page or empty"}}\n\n'
-        f"WEBSITE TEXT:\n{page}"
+        PROMPT_TEMPLATE.replace("{{NAME}}", name)
+        .replace("{{CITY}}", city)
+        .replace("{{YEAR}}", year)
+        .replace("{{PAGE}}", page)
     )
     return parse_json(claude(prompt))
 
