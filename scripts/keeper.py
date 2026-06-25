@@ -3,20 +3,21 @@
 
 Reads predicted recurrences (the `event_predictions` view), fetches each series'
 official website, and asks Claude whether the *next* edition's dates have actually
-been announced. Prints REVIEWABLE proposals — it never writes to `events` (the
-steward confirms). This is the first, narrowly-scoped keeper mission; it reuses the
-forecast as a prioritized worklist (what to look for, and where).
+been announced. When it finds confirmed dates it queues a REVIEWABLE proposal into
+the admin review queue (`candidate_events`, status=pending) — it never writes to
+`events` directly (the steward approves in the admin panel, one click). Approving a
+confirmation also makes the corresponding forecast resolve itself.
 
 Zero third-party deps (urllib, matching feed_reader.py): talks to Supabase
 PostgREST and the Anthropic Messages API over raw HTTP. Keys come from
 /opt/bearings-rs/.env (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY).
-Model is claude-opus-4-8 by default; set KEEPER_MODEL in .env to use a cheaper one
-(e.g. claude-haiku-4-5) for this routine extraction.
+Model via KEEPER_MODEL (default claude-opus-4-8; claude-haiku-4-5 for cheap runs).
 """
 import os
 import re
 import json
 from urllib.request import urlopen, Request
+from urllib.error import HTTPError
 
 
 def _load_env(p="/opt/bearings-rs/.env"):
@@ -47,6 +48,26 @@ def supa_get(path):
     )
     with urlopen(req, timeout=20) as r:
         return json.loads(r.read())
+
+
+def supa_post(path, data, prefer="resolution=ignore-duplicates,return=minimal"):
+    body = json.dumps(data).encode()
+    req = Request(
+        f"{SUPABASE_URL}/rest/v1/{path}",
+        data=body,
+        method="POST",
+        headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": prefer,
+        },
+    )
+    try:
+        with urlopen(req, timeout=20) as r:
+            return r.status
+    except HTTPError as e:
+        return e.code
 
 
 def fetch_text(url):
@@ -91,6 +112,12 @@ def parse_json(s):
         return json.loads(m.group(0)) if m else {}
 
 
+def next_edition_name(name, year):
+    if re.search(r"\b(19|20)\d{2}\b", name):
+        return re.sub(r"\b(19|20)\d{2}\b", year, name)
+    return f"{name} {year}"
+
+
 def check(pred):
     year = (pred.get("predicted_date") or "")[:4]
     name = pred.get("sample_name", "")
@@ -111,13 +138,37 @@ def check(pred):
     return parse_json(claude(prompt))
 
 
+def queue_proposal(pred, year, found):
+    start = found["start_date"]
+    end = found.get("end_date") or ""
+    base = re.sub(r"\s*\b(19|20)\d{2}\b\s*$", "", pred["sample_name"]).strip()
+    cand = {
+        "raw_title": next_edition_name(pred["sample_name"], year),
+        "raw_description": (
+            f"Keeper-confirmed from the official site ({MODEL}). "
+            f"{base} {year}: {start}" + (f" to {end}" if end else "")
+            + f". Evidence: {found.get('evidence', '')[:200]}"
+        ),
+        "raw_date": start.replace("-", ""),
+        "parsed_start": start,
+        "parsed_end": (end or None),
+        "parsed_city": pred.get("city") or None,
+        "parsed_country": pred.get("country") or None,
+        "parsed_type": "bear-run",
+        "source_url": f"{pred['website']}#keeper-{year}",
+        "status": "pending",
+    }
+    cand = {k: v for k, v in cand.items() if v is not None}
+    return supa_post("candidate_events", cand)
+
+
 def main():
     preds = supa_get(
         "event_predictions?select=sample_name,city,country,predicted_date,confidence,website"
         "&order=predicted_date"
     )
     print(f"[keeper] checking {len(preds)} forecasted series for announced dates (model={MODEL})\n")
-    proposals = []
+    queued = 0
     for p in preds:
         site = p.get("website")
         if not site:
@@ -134,14 +185,14 @@ def main():
                 f"           source:   {site}\n"
                 f"           evidence: {r.get('evidence', '')[:160]}"
             )
-            proposals.append(
-                {**p, "found_start": r["start_date"], "found_end": r.get("end_date", "")}
-            )
+            code = queue_proposal(p, year, r)
+            print(f"           -> queued to admin review queue (HTTP {code})")
+            queued += 1
         else:
             print(f"  ·  {p['sample_name']}: {year} not announced yet on {site}")
     print(
-        f"\n[keeper] {len(proposals)} confirmable date(s) found — "
-        f"review before adding (no auto-insert)."
+        f"\n[keeper] {queued} confirmation(s) queued for steward review "
+        f"in the admin panel (no auto-insert)."
     )
 
 

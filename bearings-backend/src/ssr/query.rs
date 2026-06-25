@@ -239,6 +239,10 @@ pub(crate) struct CandidateEventRow {
     pub raw_description: Option<String>,
     pub raw_date: Option<String>,
     pub parsed_country: Option<String>,
+    pub parsed_city: Option<String>,
+    pub parsed_start: Option<String>,
+    pub parsed_end: Option<String>,
+    pub parsed_type: Option<String>,
     pub source_url: Option<String>,
     pub created_at: Option<String>,
 }
