@@ -45,6 +45,6 @@ branch and a pull request, and only then gets deployed.
 
 ## Repo map
 
-See `CLAUDE.md` (project overview + stack) and `bearings-backend/ARCHITECTURE.md`
+See `README.md` (project overview) and `bearings-backend/ARCHITECTURE.md`
 (backend design + decisions). The backend layering is
 `routes/ssr → repositories → db (Supabase PostgREST)`.

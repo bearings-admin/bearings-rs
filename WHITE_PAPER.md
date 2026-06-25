@@ -260,4 +260,4 @@ multilingual operation, revenue-serves-community, non-negotiable privacy, do-not
 compete-with-partners, content-freshness-as-obligation, conversational-intake-first,
 and *inclusion is shown, not decided* (listings are never removed for being
 exclusionary — they are flagged with context and an inclusive alternative). Full text
-lives in the agent directive (`CLAUDE.md`).
+lives in the steward's agent directive.
