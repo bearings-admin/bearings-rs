@@ -81,7 +81,7 @@ pub(crate) async fn zone_admin(
     }
 
     let candidates_url = format!(
-        "{}/rest/v1/candidate_events?status=eq.pending&select=id,raw_title,raw_description,raw_date,parsed_country,source_url,created_at&order=created_at.desc&limit=50",
+        "{}/rest/v1/candidate_events?status=eq.pending&select=id,raw_title,raw_description,raw_date,parsed_country,parsed_city,parsed_start,parsed_end,parsed_type,source_url,created_at&order=created_at.desc&limit=50",
         db.url
     );
     let feeds_url = format!(
@@ -127,7 +127,7 @@ pub(crate) async fn zone_admin(
             let id    = c.id.unwrap_or(0);
             let title = esc(c.raw_title.as_deref().unwrap_or(""));
             let desc  = esc(c.raw_description.as_deref().unwrap_or(""));
-            let date  = esc(c.raw_date.as_deref().unwrap_or(""));
+            let date  = esc(c.parsed_start.as_deref().or(c.raw_date.as_deref()).unwrap_or(""));
             let ctry  = esc(c.parsed_country.as_deref().unwrap_or(""));
             let url   = esc(c.source_url.as_deref().unwrap_or("#"));
             let snip  = desc.chars().take(220).collect::<String>();
@@ -206,25 +206,42 @@ pub(crate) async fn zone_admin(
 /// approved. Writes use the service key (RLS-bypassing) via `db.write_json`.
 async fn approve_candidate(db: &SupabaseClient, id: i64) {
     let url = format!(
-        "{}/rest/v1/candidate_events?id=eq.{id}&select=raw_title,raw_description,raw_date,parsed_country,source_url",
+        "{}/rest/v1/candidate_events?id=eq.{id}&select=raw_title,raw_description,raw_date,parsed_country,parsed_city,parsed_start,parsed_end,parsed_type,source_url",
         db.url
     );
     let rows: Vec<CandidateEventRow> = db.get_json(&url).await.unwrap_or_default();
     let Some(c) = rows.into_iter().next() else {
         return;
     };
+    // Prefer a clean parsed date; fall back to the raw YYYYMMDD form.
     let start = c
-        .raw_date
+        .parsed_start
+        .clone()
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            c.raw_date
+                .as_deref()
+                .filter(|d| d.len() >= 8)
+                .map(|d| format!("{}-{}-{}", &d[..4], &d[4..6], &d[6..8]))
+        });
+    let etype = c
+        .parsed_type
+        .clone()
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| "bear-run".to_string());
+    let link = c
+        .source_url
         .as_deref()
-        .filter(|d| d.len() >= 8)
-        .map(|d| format!("{}-{}-{}", &d[..4], &d[4..6], &d[6..8]));
+        .map(|s| s.split('#').next().unwrap_or(s).to_string());
     let event = serde_json::json!({
         "name": c.raw_title.unwrap_or_default(),
         "description": c.raw_description,
         "country": c.parsed_country,
+        "city": c.parsed_city,
         "start_date": start,
-        "link": c.source_url,
-        "type": "bear-run",
+        "end_date": c.parsed_end,
+        "link": link,
+        "type": etype,
         "active": true,
         "source": "admin-approved",
     });
