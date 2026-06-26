@@ -6,8 +6,14 @@ takes everything after the `---` separator below, and substitutes the tokens
 calling Claude. Tune the keeper by editing the wording here — **the doc is the
 behaviour**, version-controlled and deployed to the VPS with the rest of the repo.
 
-The keeper **proposes, never inserts**: a positive result is queued into
-`candidate_events` for one-click steward approval in the admin panel.
+By default the keeper **proposes, never inserts**: a positive result is queued into
+`candidate_events` for one-click steward approval in the admin panel. An optional
+**auto-apply gate** (off unless `KEEPER_AUTO_APPLY` is set in `.env`) lets it promote
+only *slam-dunk* confirmations — an official-site source, a **dated verbatim quote**,
+and a start date inside the predicted window (±45 days) — straight to a live `events`
+row (`source = keeper-auto-applied`). Each auto-apply marks the candidate
+`auto_applied` with its `event_id` and is written to the `agent_actions` audit log.
+Anything ambiguous still waits for human review.
 
 ---
 
