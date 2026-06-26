@@ -147,7 +147,10 @@ pub(crate) async fn zone_coming_up(
         (999, "comingup.when.year"),
     ];
     let sel12 = if sel_val == 12 { " selected" } else { "" };
-    let mut months_sel = format!("<option value=\"12\"{sel12}>Next 12 months</option>");
+    let mut months_sel = format!(
+        "<option value=\"12\"{sel12}>{}</option>",
+        tl("forecast.next12")
+    );
     months_sel.push_str(
         &months_opts
             .iter()
@@ -212,7 +215,7 @@ pub(crate) async fn zone_coming_up(
         esc(country)
     };
     let month_label = if sel_val == 12 {
-        "Next 12 months".to_string()
+        tl("forecast.next12")
     } else {
         months_opts
             .iter()
@@ -378,6 +381,8 @@ pub(crate) async fn zone_coming_up(
                 };
                 let approx = approx_week_label(p.predicted_date.as_deref().unwrap_or(""));
                 let conf = esc(p.confidence.as_deref().unwrap_or(""));
+                let na = tl("forecast.not_announced");
+                let tent = tl("forecast.tentative");
                 format!(
                     "<div style=\"border:1px dashed {GOLD};background:#FFFDF6;border-radius:14px;\
                        padding:12px 14px;margin-bottom:8px\">\
@@ -385,9 +390,9 @@ pub(crate) async fn zone_coming_up(
                         <div style=\"flex:1;min-width:0\">\
                           <div style=\"font-weight:600;font-size:14px;line-height:1.3;color:{BROWN}\">{name}</div>\
                           <div style=\"font-size:12px;color:{MID};margin-top:2px\">{loc} \u{00b7} ~ {approx}</div>\
-                          <div style=\"font-size:11px;color:#9a7b1f;margin-top:5px\">\u{26a0} Specific dates not yet announced \u{2014} projected from past years ({conf} confidence)</div>\
+                          <div style=\"font-size:11px;color:#9a7b1f;margin-top:5px\">\u{26a0} {na} ({conf})</div>\
                         </div>\
-                        <span class=\"badge\" style=\"background:{GOLD};color:{DARK};white-space:nowrap\">tentative</span>\
+                        <span class=\"badge\" style=\"background:{GOLD};color:{DARK};white-space:nowrap\">{tent}</span>\
                       </div>\
                     </div>"
                 )
