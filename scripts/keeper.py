@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
-"""Bearings keeper — v1: forecast confirmation.
+"""Bearings keeper — v1: forecast confirmation (+ optional auto-apply gate).
 
 Reads predicted recurrences (the `event_predictions` view), fetches each series'
 official website, and asks Claude whether the *next* edition's dates have actually
-been announced. When it finds confirmed dates it queues a REVIEWABLE proposal into
-the admin review queue (`candidate_events`, status=pending) — it never writes to
-`events` directly (the steward approves in the admin panel, one click). Approving a
-confirmation also makes the corresponding forecast resolve itself.
+been announced. A positive result is queued as a REVIEWABLE proposal into the admin
+review queue (`candidate_events`, status=pending) — the steward approves in the admin
+panel, one click.
+
+AUTO-APPLY GATE (off by default): when KEEPER_AUTO_APPLY is set, a *slam-dunk*
+confirmation — official-site source, a dated verbatim quote, and a start date inside
+the predicted window — is promoted straight to a live `events` row (source
+`keeper-auto-applied`), the candidate is marked `auto_applied` with its `event_id`,
+and the action is written to the `agent_actions` audit log. Everything ambiguous still
+waits for human review. This is the deliberate "remove the steward from the routine
+loop" step, so it is opt-in.
 
 Zero third-party deps (urllib, matching feed_reader.py): talks to Supabase
 PostgREST and the Anthropic Messages API over raw HTTP. Keys come from
@@ -16,6 +23,7 @@ Model via KEEPER_MODEL (default claude-opus-4-8; claude-haiku-4-5 for cheap runs
 import os
 import re
 import json
+from datetime import date, datetime, timezone
 from urllib.request import urlopen, Request
 from urllib.error import HTTPError
 
@@ -34,6 +42,15 @@ SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
 MODEL = os.environ.get("KEEPER_MODEL", "claude-opus-4-8")
+# Auto-apply is OFF unless explicitly enabled — a deliberate trust step.
+AUTO_APPLY = os.environ.get("KEEPER_AUTO_APPLY", "").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+# A confirmed start date must fall within this many days of the forecast to auto-apply.
+WINDOW_DAYS = 45
 UA = "Bearings-Keeper/1.0 (+https://bearings.community)"
 
 # The keeper's prompt is a repo file, not hardcoded — edit directives/keeper.md to tune
@@ -71,6 +88,29 @@ def supa_post(path, data, prefer="resolution=ignore-duplicates,return=minimal"):
             "Authorization": f"Bearer {SUPABASE_KEY}",
             "Content-Type": "application/json",
             "Prefer": prefer,
+        },
+    )
+    try:
+        with urlopen(req, timeout=20) as r:
+            # return=representation yields the created row(s); minimal yields no body.
+            if "return=representation" in prefer:
+                return json.loads(r.read())
+            return r.status
+    except HTTPError as e:
+        return e.code
+
+
+def supa_patch(path, data):
+    body = json.dumps(data).encode()
+    req = Request(
+        f"{SUPABASE_URL}/rest/v1/{path}",
+        data=body,
+        method="PATCH",
+        headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal",
         },
     )
     try:
@@ -145,7 +185,7 @@ def check(pred):
     return parse_json(claude(prompt))
 
 
-def queue_proposal(pred, year, found):
+def build_candidate(pred, year, found):
     start = found["start_date"]
     end = found.get("end_date") or ""
     base = re.sub(r"\s*\b(19|20)\d{2}\b\s*$", "", pred["sample_name"]).strip()
@@ -165,8 +205,64 @@ def queue_proposal(pred, year, found):
         "source_url": f"{pred['website']}#keeper-{year}",
         "status": "pending",
     }
-    cand = {k: v for k, v in cand.items() if v is not None}
-    return supa_post("candidate_events", cand)
+    return {k: v for k, v in cand.items() if v is not None}
+
+
+def _parse_date(s):
+    try:
+        return date.fromisoformat((s or "")[:10])
+    except Exception:
+        return None
+
+
+def is_slam_dunk(pred, year, found):
+    """Strict gate for auto-apply: official source + dated quote + in-window."""
+    start = _parse_date(found.get("start_date"))
+    if not (found.get("announced") and start):
+        return False, "not announced / no start date"
+    if str(start.year) != str(year):
+        return False, f"start year {start.year} != forecast {year}"
+    pdate = _parse_date(pred.get("predicted_date"))
+    if pdate and abs((start - pdate).days) > WINDOW_DAYS:
+        return False, f"out of window ({abs((start - pdate).days)}d > {WINDOW_DAYS})"
+    ev = (found.get("evidence") or "").strip()
+    if len(ev) < 25 or not any(ch.isdigit() for ch in ev):
+        return False, "weak/undated evidence"
+    return True, "official site + dated quote + in-window"
+
+
+def audit(action, cid, eid, pred, found, detail):
+    row = {
+        "agent": "keeper",
+        "action": action,
+        "candidate_id": cid,
+        "event_id": eid,
+        "series_name": pred.get("sample_name"),
+        "detail": (detail + " | " + (found.get("evidence") or ""))[:500],
+        "model": MODEL,
+    }
+    supa_post("agent_actions", {k: v for k, v in row.items() if v is not None})
+
+
+def promote_to_event(cand):
+    """Create the live event from a candidate, stamped as keeper-auto-applied."""
+    event = {
+        "name": cand.get("raw_title"),
+        "description": cand.get("raw_description"),
+        "country": cand.get("parsed_country"),
+        "city": cand.get("parsed_city"),
+        "start_date": cand.get("parsed_start"),
+        "end_date": cand.get("parsed_end"),
+        "link": cand["source_url"].split("#")[0],
+        "type": cand.get("parsed_type") or "bear-run",
+        "active": True,
+        "source": "keeper-auto-applied",
+    }
+    event = {k: v for k, v in event.items() if v is not None}
+    rows = supa_post(
+        "events", event, prefer="return=representation"
+    )
+    return rows[0]["id"] if isinstance(rows, list) and rows else None
 
 
 def main():
@@ -174,8 +270,13 @@ def main():
         "event_predictions?select=sample_name,city,country,predicted_date,confidence,website"
         "&order=predicted_date"
     )
-    print(f"[keeper] checking {len(preds)} forecasted series for announced dates (model={MODEL})\n")
+    mode = "AUTO-APPLY ON" if AUTO_APPLY else "review-only"
+    print(
+        f"[keeper] checking {len(preds)} forecasted series for announced dates "
+        f"(model={MODEL}, {mode})\n"
+    )
     queued = 0
+    applied = 0
     for p in preds:
         site = p.get("website")
         if not site:
@@ -185,21 +286,47 @@ def main():
         year = (p.get("predicted_date") or "")[:4]
         if r.get("error"):
             print(f"  ! {p['sample_name']}: fetch/check failed — {r['error']}")
-        elif r.get("announced") and r.get("start_date"):
-            print(
-                f"  CONFIRM  {p['sample_name']} {year}: {r['start_date']} -> {r.get('end_date', '')} "
-                f"(forecast ~{p['predicted_date']})\n"
-                f"           source:   {site}\n"
-                f"           evidence: {r.get('evidence', '')[:160]}"
-            )
-            code = queue_proposal(p, year, r)
-            print(f"           -> queued to admin review queue (HTTP {code})")
-            queued += 1
-        else:
+            continue
+        if not (r.get("announced") and r.get("start_date")):
             print(f"  ·  {p['sample_name']}: {year} not announced yet on {site}")
+            continue
+
+        cand = build_candidate(p, year, r)
+        created = supa_post(
+            "candidate_events", cand, prefer="return=representation"
+        )
+        cid = created[0]["id"] if isinstance(created, list) and created else None
+        ok, reason = is_slam_dunk(p, year, r)
+        print(
+            f"  CONFIRM  {p['sample_name']} {year}: {r['start_date']} -> "
+            f"{r.get('end_date', '')} (forecast ~{p['predicted_date']})\n"
+            f"           source:   {site}\n"
+            f"           evidence: {r.get('evidence', '')[:160]}\n"
+            f"           gate:     {'PASS' if ok else 'hold'} — {reason}"
+        )
+
+        if AUTO_APPLY and ok and cid:
+            eid = promote_to_event(cand)
+            supa_patch(
+                f"candidate_events?id=eq.{cid}",
+                {
+                    "status": "auto_applied",
+                    "event_id": eid,
+                    "reviewed_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+            audit("auto_apply", cid, eid, p, r, reason)
+            applied += 1
+            print(f"           -> AUTO-APPLIED to live events (event #{eid})")
+        else:
+            note = reason if not ok else "auto-apply disabled (set KEEPER_AUTO_APPLY)"
+            audit("propose", cid, None, p, r, note)
+            queued += 1
+            print(f"           -> queued for steward review ({note})")
+
     print(
-        f"\n[keeper] {queued} confirmation(s) queued for steward review "
-        f"in the admin panel (no auto-insert)."
+        f"\n[keeper] {applied} auto-applied, {queued} queued for review "
+        f"(mode={mode})."
     )
 
 
