@@ -147,6 +147,29 @@ pub(crate) async fn zone_archive(
     }
 
     let memorial = build_memorial(&closed_places, &closed_clubs);
+
+    // Voices not tied to a historical milestone (interviews, first-person pieces) —
+    // surface them in their own section so recent community voices aren't lost.
+    let orphan_voices: String = {
+        let orphans: Vec<&CommunityStoryRow> = all_stories
+            .iter()
+            .filter(|s| s.bear_history_id.is_none())
+            .collect();
+        if orphans.is_empty() {
+            String::new()
+        } else {
+            let cards: String = orphans.iter().map(|s| build_voice_card(s)).collect();
+            format!(
+                "<div class=\"card\" style=\"margin-top:24px;padding:0\">\
+                   <div style=\"padding:11px 11px 4px\">\
+                     <div style=\"font-weight:600;font-size:14px;color:{BROWN}\">Community voices</div>\
+                     <div style=\"font-size:12px;color:{MID}\">Interviews and first-person stories from across the bear community.</div>\
+                   </div>{cards}\
+                 </div>"
+            )
+        }
+    };
+
     let page_archive_title = i18n::t(i18n::translations(), lang, "page.history.title");
     let body = format!(
         "{VOICES_CSS}\
@@ -157,6 +180,7 @@ pub(crate) async fn zone_archive(
         <div style=\"display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px\">{chips}</div>\
         {tl}\
         {memorial}\
+        {orphan_voices}\
         <div class=\"card\" style=\"margin-top:24px\">\
           <div style=\"font-weight:600;font-size:14px;margin-bottom:4px\">Title holders</div>\
           <div style=\"font-size:12px;color:{MID};margin-bottom:6px\">The full lineage of every competition lives in its own zone.</div>\
