@@ -268,14 +268,27 @@ pub(crate) async fn zone_admin(
 
 /// Promote a pending candidate event into a live `events` row, then mark it
 /// approved. Writes use the service key (RLS-bypassing) via `db.write_json`.
+///
+/// Idempotent under double-clicks: the candidate is *atomically claimed* by
+/// flipping `pending -> approved` with a `status=eq.pending` filter and
+/// `return=representation`. Only the first of two concurrent (or lagged) clicks
+/// gets the row back; the rest find nothing pending and no-op — so a candidate
+/// can only ever produce one event.
 async fn approve_candidate(db: &SupabaseClient, id: i64) {
-    let url = format!(
-        "{}/rest/v1/candidate_events?id=eq.{id}&select=raw_title,raw_description,raw_date,parsed_country,parsed_city,parsed_start,parsed_end,parsed_type,source_url",
+    let claim_url = format!(
+        "{}/rest/v1/candidate_events?id=eq.{id}&status=eq.pending&select=raw_title,raw_description,raw_date,parsed_country,parsed_city,parsed_start,parsed_end,parsed_type,source_url",
         db.url
     );
-    let rows: Vec<CandidateEventRow> = db.get_json(&url).await.unwrap_or_default();
-    let Some(c) = rows.into_iter().next() else {
-        return;
+    let claimed: Vec<CandidateEventRow> = db
+        .write_json_returning(
+            reqwest::Method::PATCH,
+            &claim_url,
+            &serde_json::json!({ "status": "approved" }),
+        )
+        .await
+        .unwrap_or_default();
+    let Some(c) = claimed.into_iter().next() else {
+        return; // already approved/claimed by an earlier click — nothing to do
     };
     // Prefer a clean parsed date; fall back to the raw YYYYMMDD form.
     let start = c
@@ -309,18 +322,26 @@ async fn approve_candidate(db: &SupabaseClient, id: i64) {
         "active": true,
         "source": "admin-approved",
     });
-    let _ = db
-        .write_json(
+    let created: Vec<serde_json::Value> = db
+        .write_json_returning(
             reqwest::Method::POST,
             &format!("{}/rest/v1/events", db.url),
             &event,
         )
-        .await;
-    let _ = db
-        .write_json(
-            reqwest::Method::PATCH,
-            &format!("{}/rest/v1/candidate_events?id=eq.{id}", db.url),
-            &serde_json::json!({ "status": "approved" }),
-        )
-        .await;
+        .await
+        .unwrap_or_default();
+    // Record the link candidate -> event (also powers the auto-applied/undo view).
+    if let Some(eid) = created
+        .into_iter()
+        .next()
+        .and_then(|v| v.get("id").and_then(|x| x.as_i64()))
+    {
+        let _ = db
+            .write_json(
+                reqwest::Method::PATCH,
+                &format!("{}/rest/v1/candidate_events?id=eq.{id}", db.url),
+                &serde_json::json!({ "event_id": eid }),
+            )
+            .await;
+    }
 }
