@@ -194,6 +194,22 @@ def next_edition_name(name, year):
     return f"{name} {year}"
 
 
+def _norm(s):
+    """Lowercase + collapse whitespace for tolerant substring comparison."""
+    return re.sub(r"\s+", " ", (s or "").lower()).strip()
+
+
+def evidence_in_page(evidence, page):
+    """True only if the model's quoted evidence actually occurs in the fetched
+    page (case/whitespace-insensitive). The keeper directive asks for a *verbatim
+    quote from the page*; verifying it here stops a hallucinated or injected quote
+    from passing the auto-apply gate. Ambiguous cases fall back to human review."""
+    ev = _norm(evidence).strip("\"'“”‘’ .")
+    if len(ev) < 12:  # substantive length is gated in is_slam_dunk (raw ev >= 25)
+        return False
+    return ev in _norm(page)
+
+
 def check(pred):
     year = (pred.get("predicted_date") or "")[:4]
     name = pred.get("sample_name", "")
@@ -208,7 +224,13 @@ def check(pred):
         .replace("{{YEAR}}", year)
         .replace("{{PAGE}}", page)
     )
-    return parse_json(claude(prompt))
+    result = parse_json(claude(prompt))
+    if not isinstance(result, dict):
+        result = {}
+    # Keep the fetched page so the auto-apply gate can verify the model's quoted
+    # evidence really appears in it (guards a hallucinated/injected quote).
+    result["_page"] = page
+    return result
 
 
 def build_candidate(pred, year, found):
@@ -254,7 +276,9 @@ def is_slam_dunk(pred, year, found):
     ev = (found.get("evidence") or "").strip()
     if len(ev) < 25 or not any(ch.isdigit() for ch in ev):
         return False, "weak/undated evidence"
-    return True, "official site + dated quote + in-window"
+    if not evidence_in_page(ev, found.get("_page", "")):
+        return False, "evidence quote not found on page (possible hallucination)"
+    return True, "official site + verified dated quote + in-window"
 
 
 def audit(action, cid, eid, pred, found, detail):
