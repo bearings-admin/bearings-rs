@@ -330,6 +330,19 @@ pub fn translations() -> &'static I18nStore {
         en.insert("ui.privacy_protected", "🔒 Privacy protected · USDC only");
         en.insert("ui.search_placeholder", "Search events, cities...");
         en.insert("ui.urgent", "URGENT");
+        // Charity impact + forecast + artifacts
+        en.insert("impact.heading", "The impact \u{2014} carried across the years");
+        en.insert("impact.intro", "What the bear community has quietly built: flagship event funds across decades, and causes the title circuit has carried sash to sash.");
+        en.insert("impact.raised", "raised for community causes");
+        en.insert("impact.causes", "causes championed");
+        en.insert("impact.pledges", "titleholder pledges");
+        en.insert("impact.sash", "Causes carried sash to sash");
+        en.insert("impact.titleholders", "titleholders");
+        en.insert("impact.cause_raised", "raised");
+        en.insert("forecast.next12", "Next 12 months");
+        en.insert("forecast.not_announced", "Specific dates not yet announced \u{2014} projected from past years");
+        en.insert("forecast.tentative", "tentative");
+        en.insert("artifact.source", "Source");
         store.insert("en", en);
         // ES — 273 keys
         let mut es: LangMap = HashMap::new();
@@ -627,6 +640,19 @@ pub fn translations() -> &'static I18nStore {
         es.insert("ui.privacy_protected", "🔒 Privacidad protegida · Solo USDC");
         es.insert("ui.search_placeholder", "Buscar eventos, ciudades...");
         es.insert("ui.urgent", "URGENTE");
+        // Charity impact + forecast + artifacts
+        es.insert("impact.heading", "El impacto \u{2014} a lo largo de los años");
+        es.insert("impact.intro", "Lo que la comunidad oso ha construido en silencio: fondos de eventos emblemáticos durante décadas, y causas que el circuito de títulos ha llevado de banda en banda.");
+        es.insert("impact.raised", "recaudado para causas comunitarias");
+        es.insert("impact.causes", "causas apoyadas");
+        es.insert("impact.pledges", "compromisos de titulares");
+        es.insert("impact.sash", "Causas llevadas de banda en banda");
+        es.insert("impact.titleholders", "titulares");
+        es.insert("impact.cause_raised", "recaudado");
+        es.insert("forecast.next12", "Próximos 12 meses");
+        es.insert("forecast.not_announced", "Fechas concretas aún no anunciadas \u{2014} proyectadas a partir de años anteriores");
+        es.insert("forecast.tentative", "tentativo");
+        es.insert("artifact.source", "Fuente");
         store.insert("es", es);
         // FR — 273 keys
         let mut fr: LangMap = HashMap::new();
@@ -924,6 +950,19 @@ pub fn translations() -> &'static I18nStore {
         fr.insert("ui.privacy_protected", "🔒 Confidentialité protégée · USDC uniquement");
         fr.insert("ui.search_placeholder", "Rechercher événements, villes...");
         fr.insert("ui.urgent", "URGENT");
+        // Charity impact + forecast + artifacts
+        fr.insert("impact.heading", "L'impact \u{2014} au fil des années");
+        fr.insert("impact.intro", "Ce que la communauté ours a bâti discrètement : des fonds d'événements phares au fil des décennies, et des causes que le circuit des titres a portées d'écharpe en écharpe.");
+        fr.insert("impact.raised", "récolté pour des causes communautaires");
+        fr.insert("impact.causes", "causes soutenues");
+        fr.insert("impact.pledges", "engagements de titulaires");
+        fr.insert("impact.sash", "Causes portées d'écharpe en écharpe");
+        fr.insert("impact.titleholders", "titulaires");
+        fr.insert("impact.cause_raised", "récolté");
+        fr.insert("forecast.next12", "12 prochains mois");
+        fr.insert("forecast.not_announced", "Dates précises pas encore annoncées \u{2014} projetées d'après les années passées");
+        fr.insert("forecast.tentative", "provisoire");
+        fr.insert("artifact.source", "Source");
         store.insert("fr", fr);
 
         let mut ja: LangMap = HashMap::new();
