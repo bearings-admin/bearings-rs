@@ -43,10 +43,30 @@ pub struct WalletState {
     pub updated: String,
 }
 
+/// A kindred resource we lean on and credit (guide, magazine, archive, directory).
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct KindredSource {
+    pub name: String,
+    pub url: String,
+    pub blurb: Option<String>,
+    pub language: Option<String>,
+    pub kind: Option<String>,
+}
+
+/// A public feed our nightly reader consumes — credited on the transparency page.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct FeedCredit {
+    pub org_name: Option<String>,
+    pub url: String,
+    pub feed_type: Option<String>,
+}
+
 #[async_trait]
 pub trait TransparencyRepository: Send + Sync {
     async fn costs(&self) -> Result<Vec<OperatingCost>, AppError>;
     async fn wallet(&self) -> Result<WalletState, AppError>;
+    async fn sources(&self) -> Result<Vec<KindredSource>, AppError>;
+    async fn feeds(&self) -> Result<Vec<FeedCredit>, AppError>;
 }
 
 pub struct SupabaseTransparencyRepository {
@@ -95,5 +115,21 @@ impl TransparencyRepository for SupabaseTransparencyRepository {
                 .unwrap_or(0.0),
             updated: m.get("lights_wallet_updated").cloned().unwrap_or_default(),
         })
+    }
+
+    async fn sources(&self) -> Result<Vec<KindredSource>, AppError> {
+        let url = format!(
+            "{}/rest/v1/kindred_sources?select=name,url,blurb,language,kind&active=eq.true&order=sort_order.asc,name.asc",
+            self.db.url
+        );
+        self.db.get_json::<Vec<KindredSource>>(&url).await
+    }
+
+    async fn feeds(&self) -> Result<Vec<FeedCredit>, AppError> {
+        let url = format!(
+            "{}/rest/v1/watched_feeds?select=org_name,url,feed_type&active=eq.true&order=org_name.asc",
+            self.db.url
+        );
+        self.db.get_json::<Vec<FeedCredit>>(&url).await
     }
 }
