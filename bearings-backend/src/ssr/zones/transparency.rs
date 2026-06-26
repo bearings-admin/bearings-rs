@@ -99,10 +99,12 @@ pub(crate) async fn zone_transparency(db: SupabaseClient, lang: &str) -> Respons
             )
         }).collect();
         format!(
-            "{h}<div class=\"card\">{items}</div>\
+            "{h}<p style=\"font-size:11px;color:{MID};margin:-6px 0 8px\">\
+               The guides, magazines and archives we lean on.</p>\
+             <div class=\"card\">{items}</div>\
              <p style=\"font-size:11px;color:{MID};margin-top:8px;line-height:1.5\">\
                We don\u{2019}t sell ads. These are resources we rely on and admire \u{2014} go support them.</p>",
-            h = sh("Kindred sources", Some("The guides, magazines and archives we lean on")),
+            h = sh("Kindred sources", None),
         )
     };
 
@@ -129,22 +131,26 @@ pub(crate) async fn zone_transparency(db: SupabaseClient, lang: &str) -> Respons
             )
         }).collect();
         format!(
-            "{h}<div class=\"card\">{items}</div>\
+            "{h}<p style=\"font-size:11px;color:{MID};margin:-6px 0 8px\">\
+               Public iCal &amp; RSS sources our agents check nightly.</p>\
+             <div class=\"card\">{items}</div>\
              <p style=\"font-size:11px;color:{MID};margin-top:8px;line-height:1.5\">\
                Our nightly reader pulls these public iCal &amp; RSS feeds from community organisers \u{2014} \
                many of the events you see start here. Thank you for keeping them open.</p>",
-            h = sh("Feeds we read", Some("Public iCal & RSS sources our agents check nightly")),
+            h = sh("Feeds we read", None),
         )
     };
 
     let ai_block = format!(
-        "{h}<div class=\"card\">\
+        "{h}<p style=\"font-size:11px;color:{MID};margin:-6px 0 8px\">\
+           Disclosed, like our affiliates and our costs.</p>\
+         <div class=\"card\">\
           <p style=\"font-size:12px;color:{DARK};line-height:1.6;margin:0\">\
             Research is assisted by AI agents \u{2014} a nightly feed reader and a weekly \u{201c}keeper.\u{201d} \
             They <strong>propose, never publish</strong>: a human approves every change. \
             Records sourced from others carry that source in their notes, and primary-source \
             evidence (photos, plaques, documents) is preserved as artifacts in the Archive.</p></div>",
-        h = sh("How we use AI", Some("Disclosed, like our affiliates and our costs")),
+        h = sh("How we use AI", None),
     );
 
     let body = format!(
