@@ -52,22 +52,40 @@ Each January, an agent should:
 
 ---
 
-## Keeper Agent — Forecast Confirmation (Weekly Cron)
+## Keeper Agent (Anthropic API; `scripts/keeper.py`, model `KEEPER_MODEL`=Haiku)
 
-Runs weekly (Mondays 03:30 UTC) via `bearings-keeper.timer` →
-`/opt/bearings-rs/scripts/keeper.py`. The first AI agent (Anthropic API; model via
-`KEEPER_MODEL` in `.env`, default Haiku). It **proposes, never inserts.**
+The keeper has **two missions**, selected by `KEEPER_MISSION`. Both **propose** into
+`candidate_events` (`status='pending'`) for one-click steward approval — except the
+auto-apply gate below.
 
-What it does: reads the recurrence forecast (`event_predictions` — series seen in ≥2
-years, projected forward), fetches each series' official website, and asks Claude
-whether the next edition's dates have been announced. Confirmations are queued into
-`candidate_events` (`status = 'pending'`) for one-click steward approval — the same
-review queue as the feeds.
+### Mission: forecast confirmation (default — weekly `bearings-keeper.timer`, Mon 03:30 UTC)
 
-**Its directive is a repo file, not hardcoded:** `directives/keeper.md` is the prompt
-the keeper sends (with per-event substitutions). Edit the directive there to tune the
-agent; the doc is the behaviour. This is the pattern for future agents — each gets a
-`directives/<name>.md`, loaded at runtime, version-controlled, deployed to the VPS.
+Reads the recurrence forecast (`event_predictions` — series seen in ≥2 years, projected
+forward), fetches each series' official website, asks Claude whether the next edition's
+dates are announced, and queues confirmations.
+
+- **Auto-apply gate (LIVE, `KEEPER_AUTO_APPLY=1`):** a *slam-dunk* confirmation — official
+  site + a **dated verbatim quote** + start date within ±45 days of the forecast — is
+  promoted straight to a live event (`source=keeper-auto-applied`), recorded in the
+  `agent_actions` audit log, and shown in the admin "Auto-applied by the keeper" section
+  with one-click **Undo** (archives the event, reverts the candidate). Anything ambiguous
+  still queues for review. Set `KEEPER_AUTO_APPLY=0` to pause.
+
+### Mission: historical backfill (`KEEPER_MISSION=backfill` — on demand)
+
+Deepens the Archive **and** the forecast by recovering PAST editions of single-edition
+series (the `event_backfill_targets` view — series we hold exactly one edition of, minus
+one-off cruises). For each, Claude uses its **web_search tool** to find past editions from
+real sources (press, listings, archives) — homepages rarely list history, so search is the
+point. Datable editions are queued for review (no auto-apply — historical research is always
+reviewed). `KEEPER_BACKFILL_LIMIT` caps per-run work. First live run: 6 targets → 11 sourced
+proposals.
+
+**Directives are repo files, not hardcoded** — `directives/keeper.md` (forecast),
+`directives/historical_backfill.md` (events), `directives/lineage_harvest.md` (titleholder
+lineages, directive written but not yet wired to a run-mode). Edit the directive to tune the
+agent; the doc is the behaviour. Each new agent gets its own `directives/<name>.md`, loaded at
+runtime, deployed to the VPS with the repo.
 
 ---
 
@@ -160,8 +178,9 @@ Known organiser IDs to check manually post-event for title results and future da
 
 | Job | Schedule | What it does |
 |---|---|---|
-| `bearings-feeds.timer` | Nightly 02:00 UTC | RSS + iCal feeds → candidate_events |
-| `bearings-keeper.timer` | Weekly Mon 03:30 UTC | Confirm forecasted dates from official sites → candidate_events |
+| `bearings-feeds.timer` | Nightly 02:00 UTC | RSS + iCal feeds → candidate_events; lifecycle sweep; **email digest** (Resend) |
+| `bearings-keeper.timer` | Weekly Mon 03:30 UTC | Forecast confirmation → candidate_events; **auto-applies slam-dunks** (audited) |
+| keeper backfill | On demand (`KEEPER_MISSION=backfill`) | Web-search past editions of thin series → candidate_events |
 | Annual iCal-static refresh | Every January (agent task) | Update ical-static URLs for new year |
 | Tier 2 scrape (future) | Monthly/quarterly | bearevents.eu, gaytravel4u — not yet live |
 | Title holder check (agent) | Post-contest | Search + PATCH title_holders via Supabase REST |
