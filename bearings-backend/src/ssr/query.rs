@@ -245,6 +245,12 @@ pub(crate) struct CandidateEventRow {
     pub parsed_type: Option<String>,
     pub source_url: Option<String>,
     pub created_at: Option<String>,
+    // Populated once a candidate is approved/auto-applied (else omitted from the
+    // select) — default so the pending-queue query, which skips them, still loads.
+    #[serde(default)]
+    pub event_id: Option<i64>,
+    #[serde(default)]
+    pub reviewed_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

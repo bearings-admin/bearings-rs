@@ -74,6 +74,33 @@ pub(crate) async fn zone_admin(
                         .await;
                 }
             }
+            // Reverse a keeper auto-apply: archive the live event (id2) — never
+            // delete (Archive Principle) — and revert the candidate so the agent's
+            // autonomous write is fully undone and auditable.
+            "undo_auto" => {
+                if let Some(eid) = id2 {
+                    let _ = db
+                        .write_json(
+                            reqwest::Method::PATCH,
+                            &format!("{}/rest/v1/events?id=eq.{eid}", db.url),
+                            &serde_json::json!({
+                                "active": false,
+                                "archive_notes": "Keeper auto-apply undone by steward."
+                            }),
+                        )
+                        .await;
+                }
+                let _ = db
+                    .write_json(
+                        reqwest::Method::PATCH,
+                        &format!("{}/rest/v1/candidate_events?id=eq.{cid}", db.url),
+                        &serde_json::json!({
+                            "status": "rejected",
+                            "steward_notes": "auto-apply undone by steward"
+                        }),
+                    )
+                    .await;
+            }
             _ => {}
         }
         let t = urlencoding::encode(token.as_deref().unwrap_or(""));
@@ -96,18 +123,24 @@ pub(crate) async fn zone_admin(
         "{}/rest/v1/event_predictions?select=sample_name,city,country,predicted_date,confidence,website&order=predicted_date&limit=60",
         db.url
     );
+    let auto_url = format!(
+        "{}/rest/v1/candidate_events?status=eq.auto_applied&select=id,raw_title,raw_description,parsed_country,parsed_city,parsed_start,source_url,event_id,reviewed_at&order=reviewed_at.desc&limit=25",
+        db.url
+    );
 
-    let (cands_res, feeds_res, dupes_res, preds_res) = tokio::join!(
+    let (cands_res, feeds_res, dupes_res, preds_res, auto_res) = tokio::join!(
         db.get_json::<Vec<CandidateEventRow>>(&candidates_url),
         db.get_json::<Vec<WatchedFeedRow>>(&feeds_url),
         db.get_json::<Vec<DupePairRow>>(&dupes_url),
         db.get_json::<Vec<PredictionRow>>(&preds_url),
+        db.get_json::<Vec<CandidateEventRow>>(&auto_url),
     );
 
     let candidates = cands_res.or_log("admin:cands_res");
     let feeds = feeds_res.or_log("admin:feeds_res");
     let dupes = dupes_res.or_log("admin:dupes_res");
     let preds = preds_res.or_log("admin:preds_res");
+    let auto_applied = auto_res.or_log("admin:auto_res");
 
     let feed_rows: String = feeds.iter().map(|f| {
         let name    = esc(f.org_name.as_deref().unwrap_or(""));
@@ -191,9 +224,40 @@ pub(crate) async fn zone_admin(
         }).collect()
     };
 
+    // Oversight surface: events the keeper auto-applied autonomously, each with a
+    // one-click undo (archive the event + revert the candidate).
+    let auto_cards: String = if auto_applied.is_empty() {
+        format!("<div style=\"padding:16px;text-align:center;color:{MID};font-size:13px\">Nothing auto-applied by the keeper yet.</div>")
+    } else {
+        auto_applied.iter().map(|c| {
+            let cid   = c.id.unwrap_or(0);
+            let eid   = c.event_id.unwrap_or(0);
+            let title = esc(c.raw_title.as_deref().unwrap_or(""));
+            let date  = esc(c.parsed_start.as_deref().unwrap_or(""));
+            let city  = esc(c.parsed_city.as_deref().unwrap_or(""));
+            let ctry  = esc(c.parsed_country.as_deref().unwrap_or(""));
+            let when  = esc(c.reviewed_at.as_deref().unwrap_or("").get(..10).unwrap_or(""));
+            let url   = esc(c.source_url.as_deref().unwrap_or("#"));
+            let snip  = esc(c.raw_description.as_deref().unwrap_or("")).chars().take(200).collect::<String>();
+            let tok   = &expected;
+            card(&format!(
+                "<div><div style=\"display:flex;justify-content:space-between;gap:8px;align-items:baseline\">\
+                   <div style=\"font-weight:600;font-size:14px\">{title}</div>\
+                   <span style=\"font-size:10px;color:#fff;background:{GOLD};border-radius:6px;padding:2px 7px;white-space:nowrap\">auto-applied {when}</span></div>\
+                 <div style=\"font-size:11px;color:{MID};margin:2px 0 6px\">{date} \u{00b7} {city} {ctry} \u{00b7} live event #{eid}</div>\
+                 <div style=\"font-size:12px;line-height:1.5;margin-bottom:8px\">{snip}</div>\
+                 <div style=\"display:flex;gap:8px\">\
+                   <a href=\"{url}\" target=\"_blank\" rel=\"noopener\" class=\"btn-o\" style=\"font-size:11px\">Source \u{2197}</a>\
+                   <a href=\"/?zone=admin&token={tok}&action=undo_auto&id={cid}&id2={eid}\" style=\"font-size:11px;color:#C0392B;padding:6px 8px\">\u{21a9} Undo (archive event)</a>\
+                 </div></div>"
+            ))
+        }).collect()
+    };
+
     let body = format!(
-        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Admin â Feed Review</h1><p style=\"font-size:12px;color:{MID};margin-bottom:16px\">Candidates from the nightly feed reader.</p>{h_feeds}<div style=\"overflow-x:auto;margin-bottom:16px\"><table style=\"width:100%;border-collapse:collapse\"><thead><tr style=\"border-bottom:1px solid {TAN}\"><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Feed</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Type</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Last fetched</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Errors</th></tr></thead><tbody>{feed_rows}</tbody></table></div>{h_preds}{pred_cards}{h_dupes}{dupe_cards}{h_cands}{cand_cards}",
+        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Admin â Feed Review</h1><p style=\"font-size:12px;color:{MID};margin-bottom:16px\">Candidates from the nightly feed reader.</p>{h_feeds}<div style=\"overflow-x:auto;margin-bottom:16px\"><table style=\"width:100%;border-collapse:collapse\"><thead><tr style=\"border-bottom:1px solid {TAN}\"><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Feed</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Type</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Last fetched</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Errors</th></tr></thead><tbody>{feed_rows}</tbody></table></div>{h_auto}{auto_cards}{h_preds}{pred_cards}{h_dupes}{dupe_cards}{h_cands}{cand_cards}",
         h_feeds = sh("Watched Feeds", Some(feeds.len())),
+        h_auto = sh("Auto-applied by the keeper", Some(auto_applied.len())),
         h_dupes = sh("Possible Duplicates", Some(dupes.len())),
         h_preds = sh("Likely Repeats \u{2014} confirm/chase", Some(preds.len())),
         h_cands = sh("Pending Candidates", Some(candidates.len())),
