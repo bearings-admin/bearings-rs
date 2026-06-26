@@ -63,6 +63,25 @@ PROMPT_TEMPLATE = (
     open(_DIRECTIVE_PATH, encoding="utf-8").read().split("\n---\n", 1)[-1].strip()
 )
 
+# Mission selector: "forecast" (default, weekly date-confirmation) or "backfill"
+# (research PAST editions of single-edition series to deepen Archive + forecast).
+MISSION = os.environ.get("KEEPER_MISSION", "forecast").strip().lower()
+# Cap per-run work for the backfill mission (API cost + politeness to sites).
+BACKFILL_LIMIT = int(os.environ.get("KEEPER_BACKFILL_LIMIT", "8"))
+
+
+def load_directive(fname):
+    p = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "directives", fname
+    )
+    return open(p, encoding="utf-8").read().split("\n---\n", 1)[-1].strip()
+
+
+# Loaded only when actually running the backfill mission.
+BACKFILL_PROMPT = (
+    load_directive("historical_backfill.md") if MISSION == "backfill" else ""
+)
+
 
 def supa_get(path):
     req = Request(
@@ -265,7 +284,7 @@ def promote_to_event(cand):
     return rows[0]["id"] if isinstance(rows, list) and rows else None
 
 
-def main():
+def run_forecast():
     preds = supa_get(
         "event_predictions?select=sample_name,city,country,predicted_date,confidence,website"
         "&order=predicted_date"
@@ -328,6 +347,121 @@ def main():
         f"\n[keeper] {applied} auto-applied, {queued} queued for review "
         f"(mode={mode})."
     )
+
+
+def parse_json_list(s):
+    try:
+        v = json.loads(s)
+        return v if isinstance(v, list) else []
+    except Exception:
+        m = re.search(r"\[.*\]", s, re.S)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except Exception:
+                return []
+        return []
+
+
+def find_past_editions(target):
+    name = target.get("sample_name", "")
+    city = target.get("city") or ""
+    try:
+        page = fetch_text(target["website"])
+    except Exception as e:
+        return {"error": str(e)}
+    prompt = (
+        BACKFILL_PROMPT.replace("{{NAME}}", name)
+        .replace("{{CITY}}", city)
+        .replace("{{PAGE}}", page)
+    )
+    return {"editions": parse_json_list(claude(prompt))}
+
+
+def queue_backfill_proposal(target, ed):
+    year = str(ed.get("year") or "")[:4]
+    start = ed.get("start_date") or ""
+    end = ed.get("end_date") or ""
+    base = re.sub(r"\s*\b(19|20)\d{2}\b\s*$", "", target["sample_name"]).strip()
+    cand = {
+        "raw_title": f"{base} {year}".strip(),
+        "raw_description": (
+            f"Keeper historical backfill ({MODEL}): past edition of {base}. "
+            f"{year}: {start}" + (f" to {end}" if end else "")
+            + f". Evidence: {(ed.get('evidence') or '')[:200]}"
+        ),
+        "raw_date": (start.replace("-", "") if start else None),
+        "parsed_start": (start or None),
+        "parsed_end": (end or None),
+        "parsed_city": target.get("city") or None,
+        "parsed_country": target.get("country") or None,
+        "parsed_type": "bear-run",
+        "source_url": f"{target['website']}#backfill-{year}",
+        "status": "pending",
+    }
+    cand = {k: v for k, v in cand.items() if v is not None}
+    created = supa_post("candidate_events", cand, prefer="return=representation")
+    return created[0]["id"] if isinstance(created, list) and created else None
+
+
+def run_backfill():
+    targets = supa_get(
+        "event_backfill_targets?select=sample_name,city,country,website,known_date"
+        f"&order=sample_name&limit={BACKFILL_LIMIT}"
+    )
+    this_year = date.today().year
+    print(
+        f"[keeper] historical backfill: scanning {len(targets)} single-edition "
+        f"series for past editions (model={MODEL})\n"
+    )
+    queued = 0
+    for t in targets:
+        site = t.get("website")
+        if not site or site == "#":
+            continue
+        known_year = str(t.get("known_date") or "")[:4]
+        r = find_past_editions(t)
+        if r.get("error"):
+            print(f"  ! {t['sample_name']}: fetch failed — {r['error']}")
+            continue
+        # Keep only genuine PAST editions (with dates) we don't already hold.
+        past = [
+            e
+            for e in r.get("editions", [])
+            if e.get("start_date")
+            and str(e.get("year") or "")[:4].isdigit()
+            and int(str(e["year"])[:4]) < this_year
+            and str(e.get("year") or "")[:4] != known_year
+        ]
+        if not past:
+            print(f"  ·  {t['sample_name']}: no new past editions on {site}")
+            continue
+        for e in past:
+            cid = queue_backfill_proposal(t, e)
+            audit(
+                "backfill",
+                cid,
+                None,
+                {"sample_name": t.get("sample_name")},
+                {"evidence": e.get("evidence", "")},
+                f"past edition {e.get('year')}",
+            )
+            queued += 1
+            print(
+                f"  +  {t['sample_name']} {e.get('year')}: {e.get('start_date')} "
+                f"-> queued for review (cand {cid})"
+            )
+    print(
+        f"\n[keeper] historical backfill: {queued} past-edition proposal(s) "
+        f"queued for steward review (no auto-insert)."
+    )
+
+
+def main():
+    if MISSION == "backfill":
+        run_backfill()
+    else:
+        run_forecast()
 
 
 if __name__ == "__main__":
