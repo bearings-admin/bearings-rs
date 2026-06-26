@@ -68,7 +68,11 @@ def send_digest(digest):
                                   "to": [to_addr], "subject": subject, "text": body}).encode()
             req = Request("https://api.resend.com/emails", data=payload,
                           headers={"Authorization": f"Bearer {resend_key}",
-                                   "Content-Type": "application/json"}, method="POST")
+                                   "Content-Type": "application/json",
+                                   # Resend's API is behind Cloudflare, which 403s the
+                                   # default Python-urllib UA (error 1010) — set a real one.
+                                   "User-Agent": "Bearings-Digest/1.0 (+https://bearings.community)"},
+                          method="POST")
             with urlopen(req, timeout=20) as r:
                 print(f"[digest] emailed via Resend ({r.status}) to {to_addr}")
             return
