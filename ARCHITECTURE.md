@@ -1,10 +1,32 @@
 
 # bearings-rs — Architectural Alignment
 
-**Last reviewed:** 2026-06-11
+**Last full review:** 2026-06-11 (the alignment tables below predate the additions noted next).
 **Purpose:** This document maps the white paper's stated architecture against
 what is actually in the database and the Rust code. It is the zoom-out view.
 Read DESIGN.md for implementation detail. Read this to understand coherence.
+
+---
+
+## Update 2026-06-26 — agent layer, charity/transparency, i18n
+
+Structural additions since the last full review (the older alignment tables below are
+not yet reconciled to these):
+
+- **Agent infrastructure.** The **keeper** (`scripts/keeper.py`, weekly timer) is a live AI
+  agent with two missions — forecast confirmation (with an **auto-apply gate**: slam-dunks
+  promote to `events`, audited in `agent_actions`, reversible via an admin Undo) and
+  web-search **historical backfill**. Directives are repo files (`directives/*.md`). See
+  `AGENT_TEAM.md` + `RESEARCH_DIRECTIVE.md`.
+- **New tables/views:** `artifacts` (provenance evidence + 📜 viewer), `kindred_sources`
+  (Transparency credits), `agent_actions` (audit log), and views `cause_contributions` /
+  updated `charity_impact` / `charity_lineage` (unified charity model), `event_backfill_targets`,
+  `event_predictions` / `event_series` (recurrence forecast).
+- **Idempotent admin approve.** `approve_candidate` atomically claims a candidate
+  (`pending→approved` with a `status=eq.pending` filter + `return=representation`) so a
+  double-click can't create duplicate events; it records `candidate_events.event_id`.
+- **i18n** keys added for the forecast, charity Impact, and artifact strings (en/es/fr baked).
+- Data has grown: title_holders **189** (was 87), events ~105, places 186, clubs 51.
 
 ---
 
