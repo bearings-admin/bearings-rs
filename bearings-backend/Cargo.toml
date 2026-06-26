@@ -23,6 +23,7 @@ dotenvy = { workspace = true }
 
 urlencoding = { workspace = true }  # URL-encode query params in submissions dedup check
 async-trait  = { workspace = true }  # async fns in repository traits
+tower_governor = "0.4"               # per-IP rate limiting (DoS) — applied in main.rs
 
 [lib]
 name = "bearings_backend"
