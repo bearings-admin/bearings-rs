@@ -493,4 +493,6 @@ pub(crate) struct CharityLineageRow {
     pub first_year: Option<i64>,
     pub last_year: Option<i64>,
     pub names: Option<String>,
+    #[serde(default)]
+    pub raised: Option<i64>,
 }

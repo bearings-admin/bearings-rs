@@ -154,9 +154,16 @@ pub(crate) async fn zone_campaigns(db: SupabaseClient, lang: &str) -> Response {
                 (Some(a), _) => a.to_string(),
                 _ => String::new(),
             };
+            // Dollars raised for this cause, where a titleholder total is recorded.
+            let raised = match l.raised {
+                Some(r) if r > 0 => format!(
+                    " \u{00b7} <span style=\"color:{GOLD};font-weight:700\">${r} raised</span>"
+                ),
+                _ => String::new(),
+            };
             body.push_str(&card(&format!(
                 "<div><div style=\"font-weight:600;font-size:14px;color:{BROWN};line-height:1.3\">{cause}</div>\
-                 <div style=\"font-size:11px;color:{MID};margin-top:2px\">{comp} \u{00b7} {people} titleholders \u{00b7} {span}</div>\
+                 <div style=\"font-size:11px;color:{MID};margin-top:2px\">{comp} \u{00b7} {people} titleholders \u{00b7} {span}{raised}</div>\
                  <div style=\"font-size:12px;color:{DARK};margin-top:6px;line-height:1.5\">{names}</div></div>"
             )));
         }
