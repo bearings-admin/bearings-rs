@@ -5,12 +5,43 @@ Supabase — the data is standard PostgreSQL and can move to any Postgres host.
 
 ## Files
 
-- **`schema.sql`** — the full public schema (tables, constraints, functions,
-  triggers, views, RLS policies), captured via catalog introspection on
-  2026-06-11. It reconstructs the structure; it is *not* a `pg_dump` (the app
-  server holds only the REST keys, not the database password).
+- **`schema.sql`** — the full current public schema (sequences, enums, tables,
+  constraints, foreign keys, indexes, views, functions, RLS policies). **Generated
+  from the live catalog** (not a `pg_dump` — the app server holds only the REST
+  keys, not the DB password). Regenerated 2026-06-26.
+- **`gen_schema.sql`** + **`../scripts/gen_schema.py`** — the password-free
+  regeneration tooling (see below).
 - **`../deploy/sql/`** — the original hand-written DDL for specific features
   (`places_nearby`, `submissions_table`, `zone_functions`, `user_preferences_wallet`).
+
+## Source of truth & change workflow
+
+**The live database catalog is the source of truth — `schema.sql` mirrors it.**
+Two things make this non-obvious and worth stating plainly:
+
+- **The Supabase migration tracker is NOT complete.** 25 of the 39 tables — including
+  the core domain (`events`, `places`, `clubs`, `competitions`, `title_holders`,
+  `campaigns`, `bear_history`, …) — were created *outside* the migration system
+  (dashboard / raw SQL, before the migration discipline started). So you cannot rebuild
+  the schema from `supabase/migrations` alone; `schema.sql` (catalog-generated) is what
+  reproduces it.
+- **Schema changes currently bypass the PR/CI gate.** They're applied straight to the
+  DB (dashboard / MCP `apply_migration`). Going forward, treat a schema change like a
+  code change: apply it, **then regenerate `schema.sql` and commit it in the same PR**,
+  so the repo and the database stay in lockstep and reviewers can see the diff.
+
+### Regenerate `schema.sql` (no DB password needed)
+
+```sh
+# 1. stage a catalog DDL dump into a temp table (Supabase SQL editor, or the MCP):
+#    run supabase/gen_schema.sql
+# 2. pull it over PostgREST and write schema.sql (uses the service key in .env):
+python3 scripts/gen_schema.py
+# 3. cleanup:  DROP TABLE public._schema_dump;   (SQL editor / MCP)
+```
+
+If you *do* have the DB password (dashboard → Settings → Database), the cleaner
+canonical path is `supabase db dump --schema public -f supabase/schema.sql`.
 
 ## Authoritative backup (recommended)
 
