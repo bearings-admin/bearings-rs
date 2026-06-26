@@ -152,9 +152,9 @@ the JSON API in `routes/`.
 
 Supabase (PostgreSQL) via PostgREST REST API. No ORM. Queries are explicit strings in the route handlers.
 
-Key tables: `events`, `places`, `clubs`, `title_holders`, `competitions`, `campaigns`, `watched_feeds`, `candidate_events`
+Key tables: `events`, `places`, `clubs`, `title_holders`, `competitions`, `campaigns`, `watched_feeds`, `candidate_events`, `artifacts` (provenance evidence), `kindred_sources` (credited resources), `agent_actions` (keeper audit log)
 
-Key views: `current_title_holders` (deduplicated, one row per title, scope pre-joined)
+Key views: `current_title_holders` (one row per title), `event_predictions`/`event_series` (recurrence forecast), `event_backfill_targets` (keeper backfill worklist), `cause_contributions`/`charity_impact`/`charity_lineage` (unified charity model)
 
 The Supabase project is at `mntdhflffhrjjvipxgyl.supabase.co`.
 
@@ -171,8 +171,14 @@ bearings-feeds.timer — fires at 02:04 UTC
 → /?zone=admin      — steward reviews and approves
 ```
 
-Feed types: `rss`, `ical`, `ical-static` (annual URL refresh needed each January).
-See `RESEARCH_DIRECTIVE.md` for the full tiered data collection strategy.
+Feed types: `rss`, `ical`, `ical-static` (annual URL refresh needed each January). The
+nightly run also archives past events and emails a digest (Resend).
+
+A second worker, **the keeper** (`scripts/keeper.py`, weekly `bearings-keeper.timer`), is an
+AI agent (Anthropic API) that confirms forecasted event dates from official sites and
+auto-applies slam-dunk confirmations (audited, reversible); a `KEEPER_MISSION=backfill` run
+web-searches past editions of recurring events. See `RESEARCH_DIRECTIVE.md` (data strategy)
+and `AGENT_TEAM.md` (agent roster + roadmap).
 
 ---
 
