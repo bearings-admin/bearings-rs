@@ -252,6 +252,7 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
                     .get(&comp.id)
                     .map(|v| v.as_slice())
                     .unwrap_or(&[]),
+                lang,
             );
 
             sections.push_str(&card(&format!(
@@ -295,7 +296,8 @@ pub(crate) async fn zone_titles(db: SupabaseClient, lang: &str) -> Response {
 }
 
 /// Render artifact source-badges (pure-CSS expanders) for a competition card.
-fn build_artifacts(arts: &[ArtifactRow]) -> String {
+fn build_artifacts(arts: &[ArtifactRow], lang: &str) -> String {
+    let src = crate::i18n::t(crate::i18n::translations(), lang, "artifact.source");
     if arts.is_empty() {
         return String::new();
     }
@@ -343,7 +345,7 @@ fn build_artifacts(arts: &[ArtifactRow]) -> String {
             format!(
                 "<div style=\"margin-top:8px\">\
                    <input type=\"checkbox\" id=\"art-{id}\" class=\"art-chk\">\
-                   <label for=\"art-{id}\" class=\"art-badge\">\u{1f4dc} Source: {title}</label>\
+                   <label for=\"art-{id}\" class=\"art-badge\">\u{1f4dc} {src}: {title}</label>\
                    <div class=\"art-panel\">\
                      <div style=\"font-size:12px;font-weight:600;color:{BROWN}\">{title}</div>\
                      <div style=\"font-size:11px;color:{MID};margin:2px 0 6px\">{kind}{cap}</div>\

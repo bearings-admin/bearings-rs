@@ -109,6 +109,7 @@ pub(crate) async fn zone_campaigns(db: SupabaseClient, lang: &str) -> Response {
     }
 
     // ── The Impact — retrospective / history ──────────────────
+    let tr = |k: &str| crate::i18n::t(crate::i18n::translations(), lang, k);
     if let Some(im) = impact.as_ref() {
         let raised = im.total_raised.unwrap_or(0);
         let money = if raised >= 1_000_000 {
@@ -126,23 +127,23 @@ pub(crate) async fn zone_campaigns(db: SupabaseClient, lang: &str) -> Response {
                    <div style=\"font-size:11px;color:{MID};margin-top:3px\">{label}</div></div>"
             )
         };
-        body.push_str(&sh("The impact \u{2014} carried across the years", None));
+        body.push_str(&sh(&tr("impact.heading"), None));
         body.push_str(&format!(
-            "<p style=\"font-size:12px;color:{MID};margin:-2px 0 10px;line-height:1.5\">What the bear \
-             community has quietly built: flagship event funds across decades, and causes the title \
-             circuit has carried sash to sash.</p>"
+            "<p style=\"font-size:12px;color:{MID};margin:-2px 0 10px;line-height:1.5\">{}</p>",
+            esc(&tr("impact.intro"))
         ));
         body.push_str(&format!(
             "<div style=\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px\">{}{}{}</div>",
-            stat(&money, "raised for community causes"),
-            stat(&im.causes.unwrap_or(0).to_string(), "causes championed"),
-            stat(&im.pledges.unwrap_or(0).to_string(), "titleholder pledges"),
+            stat(&money, &tr("impact.raised")),
+            stat(&im.causes.unwrap_or(0).to_string(), &tr("impact.causes")),
+            stat(&im.pledges.unwrap_or(0).to_string(), &tr("impact.pledges")),
         ));
     }
     if !lineages.is_empty() {
         body.push_str(&format!(
             "<div style=\"font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;\
-               color:{BROWN};margin:4px 0 8px\">Causes carried sash to sash</div>"
+               color:{BROWN};margin:4px 0 8px\">{}</div>",
+            esc(&tr("impact.sash"))
         ));
         for l in &lineages {
             let cause = esc(l.cause.as_deref().unwrap_or(""));
@@ -157,13 +158,15 @@ pub(crate) async fn zone_campaigns(db: SupabaseClient, lang: &str) -> Response {
             // Dollars raised for this cause, where a titleholder total is recorded.
             let raised = match l.raised {
                 Some(r) if r > 0 => format!(
-                    " \u{00b7} <span style=\"color:{GOLD};font-weight:700\">${r} raised</span>"
+                    " \u{00b7} <span style=\"color:{GOLD};font-weight:700\">${r} {w}</span>",
+                    w = tr("impact.cause_raised")
                 ),
                 _ => String::new(),
             };
+            let th_word = tr("impact.titleholders");
             body.push_str(&card(&format!(
                 "<div><div style=\"font-weight:600;font-size:14px;color:{BROWN};line-height:1.3\">{cause}</div>\
-                 <div style=\"font-size:11px;color:{MID};margin-top:2px\">{comp} \u{00b7} {people} titleholders \u{00b7} {span}{raised}</div>\
+                 <div style=\"font-size:11px;color:{MID};margin-top:2px\">{comp} \u{00b7} {people} {th_word} \u{00b7} {span}{raised}</div>\
                  <div style=\"font-size:12px;color:{DARK};margin-top:6px;line-height:1.5\">{names}</div></div>"
             )));
         }
