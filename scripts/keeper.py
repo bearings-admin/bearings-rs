@@ -148,14 +148,15 @@ def fetch_text(url):
     return re.sub(r"\s+", " ", text).strip()[:9000]
 
 
-def claude(prompt):
-    body = json.dumps(
-        {
-            "model": MODEL,
-            "max_tokens": 700,
-            "messages": [{"role": "user", "content": prompt}],
-        }
-    ).encode()
+def claude(prompt, tools=None, max_tokens=700):
+    payload = {
+        "model": MODEL,
+        "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    if tools:
+        payload["tools"] = tools
+    body = json.dumps(payload).encode()
     req = Request(
         "https://api.anthropic.com/v1/messages",
         data=body,
@@ -166,11 +167,17 @@ def claude(prompt):
             "content-type": "application/json",
         },
     )
-    with urlopen(req, timeout=90) as r:
+    # Web search can take a while (multiple round trips), so allow more time.
+    with urlopen(req, timeout=180 if tools else 90) as r:
         data = json.loads(r.read())
     return "".join(
         b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"
     )
+
+
+# Server-side web search tool — lets the backfill mission find PAST editions from
+# real sources (press, archives, Wikipedia) instead of only the event's homepage.
+WEB_SEARCH_TOOL = [{"type": "web_search_20250305", "name": "web_search", "max_uses": 4}]
 
 
 def parse_json(s):
@@ -366,16 +373,17 @@ def parse_json_list(s):
 def find_past_editions(target):
     name = target.get("sample_name", "")
     city = target.get("city") or ""
-    try:
-        page = fetch_text(target["website"])
-    except Exception as e:
-        return {"error": str(e)}
+    site = target.get("website") or ""
     prompt = (
         BACKFILL_PROMPT.replace("{{NAME}}", name)
         .replace("{{CITY}}", city)
-        .replace("{{PAGE}}", page)
+        .replace("{{SITE}}", site)
     )
-    return {"editions": parse_json_list(claude(prompt))}
+    try:
+        out = claude(prompt, tools=WEB_SEARCH_TOOL, max_tokens=2000)
+    except Exception as e:
+        return {"error": str(e)}
+    return {"editions": parse_json_list(out)}
 
 
 def queue_backfill_proposal(target, ed):
