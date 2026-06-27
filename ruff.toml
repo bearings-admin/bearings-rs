@@ -1,0 +1,8 @@
+# Lint config for the Python agent scripts (scripts/*.py).
+# These are zero-dependency stdlib scripts (the keeper, feed reader, digest,
+# schema generator). We gate on bugs, not style:
+#   E9 = syntax errors
+#   F  = pyflakes (undefined names, unused imports/variables, f-string mistakes)
+# Run: ruff check scripts/
+[lint]
+select = ["E9", "F"]

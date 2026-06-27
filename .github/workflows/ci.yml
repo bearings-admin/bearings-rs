@@ -49,6 +49,34 @@ jobs:
       - name: cargo fmt check
         run: cargo fmt -p bearings-shared -p bearings-backend -p bearings-agent -- --check
 
+  python:
+    name: Python — agents lint + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff + pytest
+        run: pip install ruff pytest
+
+      # Lint the agent scripts (scripts/*.py). Config in ruff.toml selects E9 + F
+      # (syntax errors + pyflakes: undefined names / unused imports) — bugs, not style.
+      - name: ruff check
+        run: ruff check scripts/
+
+      # Unit-test the keeper's pure decision logic — especially the auto-apply gate,
+      # which can write live events. No network. Dummy env so keeper imports cleanly.
+      - name: pytest
+        env:
+          SUPABASE_URL: http://localhost
+          SUPABASE_SERVICE_ROLE_KEY: test
+          ANTHROPIC_API_KEY: test
+        run: pytest -q scripts/
+
   build-release:
     name: Release Build
     runs-on: ubuntu-latest

@@ -8,10 +8,10 @@ inserts new ones into candidate_events.
 Usage: python3 /opt/bearings-rs/scripts/feed_reader.py
 """
 
-import os, sys, json, re, xml.etree.ElementTree as ET
+import os, json, re, xml.etree.ElementTree as ET
 from datetime import datetime, timezone, date
 from urllib.request import urlopen, Request
-from urllib.error import URLError, HTTPError
+from urllib.error import HTTPError
 from digest import build_digest, write_log, send_digest
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
@@ -268,7 +268,7 @@ def process_feed(feed):
     })
 
     if status == 304 or raw is None:
-        print(f"    304 Not Modified — nothing to parse")
+        print("    304 Not Modified — nothing to parse")
         return {"org": org, "parsed": 0, "new": 0, "past": 0, "skipped": 0, "error": None}
 
     if is_ical:
