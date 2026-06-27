@@ -74,6 +74,7 @@ pub(crate) async fn zone_transparency(db: SupabaseClient, lang: &str) -> Respons
     };
 
     // --- Source transparency: the credit that mirrors the financial disclosure ---
+    let tr = |k: &str| crate::i18n::t(crate::i18n::translations(), lang, k);
 
     let sources_block = if sources.is_empty() {
         String::new()
@@ -99,12 +100,12 @@ pub(crate) async fn zone_transparency(db: SupabaseClient, lang: &str) -> Respons
             )
         }).collect();
         format!(
-            "{h}<p style=\"font-size:11px;color:{MID};margin:-6px 0 8px\">\
-               The guides, magazines and archives we lean on.</p>\
+            "{h}<p style=\"font-size:11px;color:{MID};margin:-6px 0 8px\">{sub}</p>\
              <div class=\"card\">{items}</div>\
-             <p style=\"font-size:11px;color:{MID};margin-top:8px;line-height:1.5\">\
-               We don\u{2019}t sell ads. These are resources we rely on and admire \u{2014} go support them.</p>",
-            h = sh("Kindred sources", None),
+             <p style=\"font-size:11px;color:{MID};margin-top:8px;line-height:1.5\">{blurb}</p>",
+            h = sh(&tr("transp.kindred_h"), None),
+            sub = tr("transp.kindred_sub"),
+            blurb = tr("transp.kindred_blurb"),
         )
     };
 
@@ -131,26 +132,22 @@ pub(crate) async fn zone_transparency(db: SupabaseClient, lang: &str) -> Respons
             )
         }).collect();
         format!(
-            "{h}<p style=\"font-size:11px;color:{MID};margin:-6px 0 8px\">\
-               Public iCal &amp; RSS sources our agents check nightly.</p>\
+            "{h}<p style=\"font-size:11px;color:{MID};margin:-6px 0 8px\">{sub}</p>\
              <div class=\"card\">{items}</div>\
-             <p style=\"font-size:11px;color:{MID};margin-top:8px;line-height:1.5\">\
-               Our nightly reader pulls these public iCal &amp; RSS feeds from community organisers \u{2014} \
-               many of the events you see start here. Thank you for keeping them open.</p>",
-            h = sh("Feeds we read", None),
+             <p style=\"font-size:11px;color:{MID};margin-top:8px;line-height:1.5\">{blurb}</p>",
+            h = sh(&tr("transp.feeds_h"), None),
+            sub = tr("transp.feeds_sub"),
+            blurb = tr("transp.feeds_blurb"),
         )
     };
 
     let ai_block = format!(
-        "{h}<p style=\"font-size:11px;color:{MID};margin:-6px 0 8px\">\
-           Disclosed, like our affiliates and our costs.</p>\
+        "{h}<p style=\"font-size:11px;color:{MID};margin:-6px 0 8px\">{sub}</p>\
          <div class=\"card\">\
-          <p style=\"font-size:12px;color:{DARK};line-height:1.6;margin:0\">\
-            Research is assisted by AI agents \u{2014} a nightly feed reader and a weekly \u{201c}keeper.\u{201d} \
-            They <strong>propose, never publish</strong>: a human approves every change. \
-            Records sourced from others carry that source in their notes, and primary-source \
-            evidence (photos, plaques, documents) is preserved as artifacts in the Archive.</p></div>",
-        h = sh("How we use AI", None),
+          <p style=\"font-size:12px;color:{DARK};line-height:1.6;margin:0\">{body}</p></div>",
+        h = sh(&tr("transp.ai_h"), None),
+        sub = tr("transp.ai_sub"),
+        body = tr("transp.ai_body"),
     );
 
     let body = format!(
