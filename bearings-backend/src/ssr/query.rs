@@ -253,6 +253,19 @@ pub(crate) struct CandidateEventRow {
     pub reviewed_at: Option<String>,
 }
 
+/// A keeper lineage-harvest proposal awaiting steward review (titleholders).
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct CandidateTitleHolderRow {
+    pub id: Option<i64>,
+    pub title_name: Option<String>,
+    pub holder_name: Option<String>,
+    pub year: Option<i64>,
+    pub city: Option<String>,
+    pub country: Option<String>,
+    pub competition_id: Option<i64>,
+    pub evidence: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct WatchedFeedRow {
     pub id: Option<i64>,

@@ -103,6 +103,34 @@ impl SupabaseClient {
         Ok(value)
     }
 
+    /// Like `get_json` but with the service key (RLS-bypassing) and no caching —
+    /// for admin-only reads of locked tables (e.g. `candidate_title_holders`, which
+    /// holds identity data and deliberately has no public-read policy).
+    pub async fn get_json_service<T: serde::de::DeserializeOwned>(
+        &self,
+        url: &str,
+    ) -> Result<T, AppError> {
+        let response = self
+            .client
+            .get(url)
+            .header("apikey", &self.service_key)
+            .header("Authorization", format!("Bearer {}", self.service_key))
+            .header("Accept", "application/json")
+            .send()
+            .await
+            .map_err(AppError::Database)?;
+        let status = response.status();
+        let body = response.text().await.map_err(AppError::Database)?;
+        if !status.is_success() {
+            return Err(AppError::Internal(anyhow::anyhow!(
+                "Supabase error {}: {}",
+                status,
+                body
+            )));
+        }
+        serde_json::from_str::<T>(&body).map_err(|e| AppError::Internal(e.into()))
+    }
+
     /// POST to a Supabase RPC endpoint and deserialise the response.
     /// Used for stored-function calls like places_nearby.
     /// Uses the anon key — RPC functions called from public API.
