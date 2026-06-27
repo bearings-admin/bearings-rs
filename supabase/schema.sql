@@ -1526,6 +1526,7 @@ CREATE OR REPLACE VIEW titleholder_lineage_status AS
     min(year) AS first_year,
     max(year) AS last_year,
     count(*) AS holders,
+    max(year) - min(year) + 1 - count(*)::integer AS gap_years,
     array_agg(DISTINCT year ORDER BY year) AS held_years
    FROM title_holders
   WHERE year IS NOT NULL
