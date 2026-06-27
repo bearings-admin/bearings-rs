@@ -101,6 +101,18 @@ pub(crate) async fn zone_admin(
                     )
                     .await;
             }
+            // Keeper lineage-harvest proposal (titleholders): approve → insert into
+            // title_holders (idempotent claim), or reject.
+            "approve_th" => approve_title_holder(&db, cid).await,
+            "reject_th" => {
+                let _ = db
+                    .write_json(
+                        reqwest::Method::PATCH,
+                        &format!("{}/rest/v1/candidate_title_holders?id=eq.{cid}", db.url),
+                        &serde_json::json!({ "status": "rejected" }),
+                    )
+                    .await;
+            }
             _ => {}
         }
         let t = urlencoding::encode(token.as_deref().unwrap_or(""));
@@ -127,13 +139,20 @@ pub(crate) async fn zone_admin(
         "{}/rest/v1/candidate_events?status=eq.auto_applied&select=id,raw_title,raw_description,parsed_country,parsed_city,parsed_start,source_url,event_id,reviewed_at&order=reviewed_at.desc&limit=25",
         db.url
     );
+    // Titleholder proposals are read with the SERVICE key — the table holds identity
+    // data and has no public-read policy (unlike candidate_events).
+    let th_url = format!(
+        "{}/rest/v1/candidate_title_holders?status=eq.pending&select=id,title_name,holder_name,year,city,country,competition_id,evidence&order=title_name.asc,year.asc&limit=80",
+        db.url
+    );
 
-    let (cands_res, feeds_res, dupes_res, preds_res, auto_res) = tokio::join!(
+    let (cands_res, feeds_res, dupes_res, preds_res, auto_res, th_res) = tokio::join!(
         db.get_json::<Vec<CandidateEventRow>>(&candidates_url),
         db.get_json::<Vec<WatchedFeedRow>>(&feeds_url),
         db.get_json::<Vec<DupePairRow>>(&dupes_url),
         db.get_json::<Vec<PredictionRow>>(&preds_url),
         db.get_json::<Vec<CandidateEventRow>>(&auto_url),
+        db.get_json_service::<Vec<CandidateTitleHolderRow>>(&th_url),
     );
 
     let candidates = cands_res.or_log("admin:cands_res");
@@ -141,6 +160,7 @@ pub(crate) async fn zone_admin(
     let dupes = dupes_res.or_log("admin:dupes_res");
     let preds = preds_res.or_log("admin:preds_res");
     let auto_applied = auto_res.or_log("admin:auto_res");
+    let th_props = th_res.or_log("admin:th_res");
 
     let feed_rows: String = feeds.iter().map(|f| {
         let name    = esc(f.org_name.as_deref().unwrap_or(""));
@@ -254,10 +274,39 @@ pub(crate) async fn zone_admin(
         }).collect()
     };
 
+    // Keeper lineage-harvest proposals (titleholders) awaiting review.
+    let th_cards: String = if th_props.is_empty() {
+        format!("<div style=\"padding:16px;text-align:center;color:{MID};font-size:13px\">No pending titleholder proposals.</div>")
+    } else {
+        th_props.iter().map(|c| {
+            let id    = c.id.unwrap_or(0);
+            let title = esc(c.title_name.as_deref().unwrap_or(""));
+            let who   = esc(c.holder_name.as_deref().unwrap_or(""));
+            let yr    = c.year.map(|y| y.to_string()).unwrap_or_default();
+            let mut loc_parts: Vec<String> = Vec::new();
+            if let Some(s) = c.city.as_deref().filter(|s| !s.is_empty()) { loc_parts.push(esc(s)); }
+            if let Some(s) = c.country.as_deref().filter(|s| !s.is_empty()) { loc_parts.push(esc(s)); }
+            let loc = loc_parts.join(", ");
+            let meta = if loc.is_empty() { who.clone() } else { format!("{who} \u{00b7} {loc}") };
+            let ev    = esc(c.evidence.as_deref().unwrap_or(""));
+            let tok   = &expected;
+            card(&format!(
+                "<div><div style=\"font-weight:600;font-size:14px\">{title} {yr}</div>\
+                 <div style=\"font-size:12px;color:{DARK};margin:2px 0\">{meta}</div>\
+                 <div style=\"font-size:11px;color:{MID};line-height:1.5;margin-bottom:8px\">{ev}</div>\
+                 <div style=\"display:flex;gap:8px\">\
+                   <a href=\"/?zone=admin&token={tok}&action=approve_th&id={id}\" class=\"btn-g\" style=\"font-size:11px\">\u{2713} Approve</a>\
+                   <a href=\"/?zone=admin&token={tok}&action=reject_th&id={id}\" style=\"font-size:11px;color:{MID};padding:6px 0\">Reject</a>\
+                 </div></div>"
+            ))
+        }).collect()
+    };
+
     let body = format!(
-        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Admin â Feed Review</h1><p style=\"font-size:12px;color:{MID};margin-bottom:16px\">Candidates from the nightly feed reader.</p>{h_feeds}<div style=\"overflow-x:auto;margin-bottom:16px\"><table style=\"width:100%;border-collapse:collapse\"><thead><tr style=\"border-bottom:1px solid {TAN}\"><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Feed</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Type</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Last fetched</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Errors</th></tr></thead><tbody>{feed_rows}</tbody></table></div>{h_auto}{auto_cards}{h_preds}{pred_cards}{h_dupes}{dupe_cards}{h_cands}{cand_cards}",
+        "<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Admin â Feed Review</h1><p style=\"font-size:12px;color:{MID};margin-bottom:16px\">Candidates from the nightly feed reader.</p>{h_feeds}<div style=\"overflow-x:auto;margin-bottom:16px\"><table style=\"width:100%;border-collapse:collapse\"><thead><tr style=\"border-bottom:1px solid {TAN}\"><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Feed</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Type</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Last fetched</th><th style=\"text-align:left;padding:4px 8px;font-size:11px;color:{MID}\">Errors</th></tr></thead><tbody>{feed_rows}</tbody></table></div>{h_auto}{auto_cards}{h_th}{th_cards}{h_preds}{pred_cards}{h_dupes}{dupe_cards}{h_cands}{cand_cards}",
         h_feeds = sh("Watched Feeds", Some(feeds.len())),
         h_auto = sh("Auto-applied by the keeper", Some(auto_applied.len())),
+        h_th = sh("Pending Titleholder Proposals", Some(th_props.len())),
         h_dupes = sh("Possible Duplicates", Some(dupes.len())),
         h_preds = sh("Likely Repeats \u{2014} confirm/chase", Some(preds.len())),
         h_cands = sh("Pending Candidates", Some(candidates.len())),
@@ -341,6 +390,63 @@ async fn approve_candidate(db: &SupabaseClient, id: i64) {
                 reqwest::Method::PATCH,
                 &format!("{}/rest/v1/candidate_events?id=eq.{id}", db.url),
                 &serde_json::json!({ "event_id": eid }),
+            )
+            .await;
+    }
+}
+
+/// Promote a pending titleholder proposal into a live `title_holders` row, then
+/// link it back. Idempotent under double-clicks via an atomic `pending -> approved`
+/// claim (only the first click gets the row).
+async fn approve_title_holder(db: &SupabaseClient, id: i64) {
+    let claim_url = format!(
+        "{}/rest/v1/candidate_title_holders?id=eq.{id}&status=eq.pending&select=title_name,holder_name,year,city,country,competition_id,evidence",
+        db.url
+    );
+    let claimed: Vec<CandidateTitleHolderRow> = db
+        .write_json_returning(
+            reqwest::Method::PATCH,
+            &claim_url,
+            &serde_json::json!({ "status": "approved" }),
+        )
+        .await
+        .unwrap_or_default();
+    let Some(c) = claimed.into_iter().next() else {
+        return; // already approved/claimed by an earlier click
+    };
+    let bio = c
+        .evidence
+        .as_deref()
+        .map(|e| format!("Source (keeper lineage harvest): {e}"));
+    let holder = serde_json::json!({
+        "title_name": c.title_name,
+        "holder_name": c.holder_name,
+        "year": c.year,
+        "city": c.city,
+        "country": c.country,
+        "competition_id": c.competition_id,
+        "holder_status": "active",
+        "bio": bio,
+        "active": true,
+    });
+    let created: Vec<serde_json::Value> = db
+        .write_json_returning(
+            reqwest::Method::POST,
+            &format!("{}/rest/v1/title_holders", db.url),
+            &holder,
+        )
+        .await
+        .unwrap_or_default();
+    if let Some(thid) = created
+        .into_iter()
+        .next()
+        .and_then(|v| v.get("id").and_then(|x| x.as_i64()))
+    {
+        let _ = db
+            .write_json(
+                reqwest::Method::PATCH,
+                &format!("{}/rest/v1/candidate_title_holders?id=eq.{id}", db.url),
+                &serde_json::json!({ "title_holder_id": thid }),
             )
             .await;
     }
