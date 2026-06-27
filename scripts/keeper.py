@@ -63,11 +63,13 @@ PROMPT_TEMPLATE = (
     open(_DIRECTIVE_PATH, encoding="utf-8").read().split("\n---\n", 1)[-1].strip()
 )
 
-# Mission selector: "forecast" (default, weekly date-confirmation) or "backfill"
-# (research PAST editions of single-edition series to deepen Archive + forecast).
+# Mission selector: "forecast" (default, weekly date-confirmation), "backfill"
+# (research PAST editions of single-edition series), or "lineage" (research missing
+# YEARS of a titleholder lineage from official Hall-of-Fame / press sources).
 MISSION = os.environ.get("KEEPER_MISSION", "forecast").strip().lower()
-# Cap per-run work for the backfill mission (API cost + politeness to sites).
+# Cap per-run work for the backfill/lineage missions (API cost + politeness to sites).
 BACKFILL_LIMIT = int(os.environ.get("KEEPER_BACKFILL_LIMIT", "8"))
+LINEAGE_LIMIT = int(os.environ.get("KEEPER_LINEAGE_LIMIT", "6"))
 
 
 def load_directive(fname):
@@ -77,9 +79,12 @@ def load_directive(fname):
     return open(p, encoding="utf-8").read().split("\n---\n", 1)[-1].strip()
 
 
-# Loaded only when actually running the backfill mission.
+# Loaded only when the matching mission runs.
 BACKFILL_PROMPT = (
     load_directive("historical_backfill.md") if MISSION == "backfill" else ""
+)
+LINEAGE_PROMPT = (
+    load_directive("lineage_harvest.md") if MISSION == "lineage" else ""
 )
 
 
@@ -489,9 +494,104 @@ def run_backfill():
     )
 
 
+def find_lineage(target):
+    title = target.get("title_name", "")
+    country = target.get("country") or ""
+    have = ", ".join(str(y) for y in (target.get("held_years") or [])) or "(none)"
+    prompt = (
+        LINEAGE_PROMPT.replace("{{TITLE}}", title)
+        .replace("{{COUNTRY}}", country)
+        .replace("{{HAVE}}", have)
+    )
+    try:
+        out = claude(prompt, tools=WEB_SEARCH_TOOL, max_tokens=2000)
+    except Exception as e:
+        return {"error": str(e)}
+    return {"holders": parse_json_list(out)}
+
+
+def queue_lineage_proposal(target, h):
+    year = str(h.get("year") or "")[:4]
+    cand = {
+        "title_name": target["title_name"],
+        "holder_name": h.get("name") or h.get("holder_name"),
+        "year": int(year) if year.isdigit() else None,
+        "city": h.get("city") or None,
+        "country": target.get("country") or None,
+        "competition_id": target.get("competition_id"),
+        "source_url": (h.get("source") or "")[:300] or None,
+        "evidence": (h.get("evidence") or "")[:300] or None,
+        "status": "pending",
+    }
+    cand = {k: v for k, v in cand.items() if v is not None}
+    created = supa_post(
+        "candidate_title_holders",
+        cand,
+        prefer="resolution=ignore-duplicates,return=representation",
+    )
+    return created[0]["id"] if isinstance(created, list) and created else None
+
+
+def run_lineage():
+    targets = supa_get(
+        "titleholder_lineage_status?select=title_name,competition_id,country,"
+        "first_year,last_year,holders,held_years"
+        f"&order=holders.asc&limit={LINEAGE_LIMIT}"
+    )
+    this_year = date.today().year
+    print(
+        f"[keeper] lineage harvest: scanning {len(targets)} titles for missing "
+        f"years (model={MODEL})\n"
+    )
+    queued = 0
+    for t in targets:
+        held = set(t.get("held_years") or [])
+        span = (t.get("last_year") or 0) - (t.get("first_year") or 0) + 1
+        # Skip titles that are already a complete contiguous run.
+        if span <= len(held) and len(held) >= 3:
+            print(f"  ·  {t['title_name']}: no gaps to fill")
+            continue
+        r = find_lineage(t)
+        if r.get("error"):
+            print(f"  ! {t['title_name']}: research failed — {r['error']}")
+            continue
+        new = [
+            h
+            for h in r.get("holders", [])
+            if str(h.get("year") or "")[:4].isdigit()
+            and int(str(h["year"])[:4]) <= this_year
+            and int(str(h["year"])[:4]) not in held
+            and (h.get("name") or h.get("holder_name"))
+        ]
+        if not new:
+            print(f"  ·  {t['title_name']}: no new years found")
+            continue
+        for h in new:
+            cid = queue_lineage_proposal(t, h)
+            audit(
+                "lineage",
+                cid,
+                None,
+                {"sample_name": t["title_name"]},
+                {"evidence": h.get("evidence", "")},
+                f"year {h.get('year')}",
+            )
+            queued += 1
+            print(
+                f"  +  {t['title_name']} {h.get('year')}: "
+                f"{h.get('name') or h.get('holder_name')} -> queued (cand {cid})"
+            )
+    print(
+        f"\n[keeper] lineage harvest: {queued} titleholder proposal(s) "
+        f"queued for review (no auto-insert)."
+    )
+
+
 def main():
     if MISSION == "backfill":
         run_backfill()
+    elif MISSION == "lineage":
+        run_lineage()
     else:
         run_forecast()
 

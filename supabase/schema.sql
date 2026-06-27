@@ -25,6 +25,8 @@ CREATE SEQUENCE IF NOT EXISTS campaigns_id_seq;
 
 CREATE SEQUENCE IF NOT EXISTS candidate_events_id_seq;
 
+CREATE SEQUENCE IF NOT EXISTS candidate_title_holders_id_seq;
+
 CREATE SEQUENCE IF NOT EXISTS clubs_id_seq;
 
 CREATE SEQUENCE IF NOT EXISTS code_id_seq;
@@ -277,6 +279,25 @@ CREATE TABLE candidate_events (
     UNIQUE (source_url),
     PRIMARY KEY (id),
     CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'duplicate'::text, 'auto_applied'::text])))
+);
+
+CREATE TABLE candidate_title_holders (
+    id bigint NOT NULL DEFAULT nextval('candidate_title_holders_id_seq'::regclass),
+    title_name text NOT NULL,
+    holder_name text NOT NULL,
+    year integer,
+    city text,
+    country text,
+    competition_id bigint,
+    source_url text,
+    evidence text,
+    status text NOT NULL DEFAULT 'pending'::text,
+    title_holder_id bigint,
+    steward_notes text,
+    reviewed_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now(),
+    PRIMARY KEY (id),
+    CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'duplicate'::text])))
 );
 
 CREATE TABLE clubs (
@@ -980,6 +1001,8 @@ CREATE INDEX agent_actions_created_idx ON public.agent_actions USING btree (crea
 
 CREATE INDEX artifacts_entity_idx ON public.artifacts USING btree (entity_type, entity_id);
 
+CREATE UNIQUE INDEX cth_title_year_uniq ON public.candidate_title_holders USING btree (title_name, year);
+
 CREATE UNIQUE INDEX events_active_unique_name_date_city ON public.events USING btree (lower(name), start_date, lower(COALESCE(city, ''::text))) WHERE active;
 
 CREATE INDEX idx_code_crate ON public.code USING btree (crate);
@@ -1495,6 +1518,18 @@ CREATE OR REPLACE VIEW places_with_flags AS
    FROM places p
      LEFT JOIN places alt ON p.inclusive_alternative_id = alt.id
   WHERE p.active = true;
+
+CREATE OR REPLACE VIEW titleholder_lineage_status AS
+ SELECT title_name,
+    max(competition_id) AS competition_id,
+    max(country) AS country,
+    min(year) AS first_year,
+    max(year) AS last_year,
+    count(*) AS holders,
+    array_agg(DISTINCT year ORDER BY year) AS held_years
+   FROM title_holders
+  WHERE year IS NOT NULL
+  GROUP BY title_name;
 
 
 -- ========================================================================
