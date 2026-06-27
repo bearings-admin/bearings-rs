@@ -49,6 +49,26 @@ pub(crate) async fn zone_coming_up(
             )
         }
     };
+    // A clicked month narrows the fetch to exactly that month within the rolling
+    // 12-month window. Otherwise we'd fetch the whole window (capped at max_rows)
+    // and post-filter — so a far-future month (e.g. next January) can fall past the
+    // row cap and silently vanish from the filtered list.
+    let (from_date, to_date) = match month_filter.filter(|m| (1..=12).contains(m)) {
+        Some(m) => {
+            let yr = if m >= today.month() {
+                today.year()
+            } else {
+                today.year() + 1
+            };
+            let first = NaiveDate::from_ymd_opt(yr, m, 1).unwrap_or(from_date);
+            let last = first
+                .checked_add_months(Months::new(1))
+                .and_then(|d| d.pred_opt())
+                .unwrap_or(to_date);
+            (first.max(today), last)
+        }
+        None => (from_date, to_date),
+    };
     let from_str = from_date.format("%Y-%m-%d").to_string();
     let to_str = to_date.format("%Y-%m-%d").to_string();
 
