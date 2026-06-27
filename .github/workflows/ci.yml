@@ -77,6 +77,22 @@ jobs:
           ANTHROPIC_API_KEY: test
         run: pytest -q scripts/
 
+      # Schema drift check: regenerate schema.sql from the live DB and fail if it
+      # differs from the committed file. Opt-in — runs only when the repo has the
+      # SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY Actions secrets set (it skips
+      # otherwise so it never blocks). See supabase/README.md to enable. The check
+      # is always runnable on the VPS / locally: python3 scripts/gen_schema.py --check
+      - name: schema drift check (opt-in)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "SUPABASE_URL secret not set — skipping schema drift check."
+            exit 0
+          fi
+          python3 scripts/gen_schema.py --check
+
   build-release:
     name: Release Build
     runs-on: ubuntu-latest

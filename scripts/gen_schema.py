@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
-"""Regenerate supabase/schema.sql from the live database catalog.
+"""Regenerate — or --check — supabase/schema.sql from the live database.
 
-Pulls the assembled DDL from public._schema_dump over PostgREST (service key from
-/opt/bearings-rs/.env) and writes a current, ordered schema file. SQL never passes
-through anything but this script. The DB is the only complete source of truth: 25 of
-the 39 tables were created outside the migration tracker, so this catalog dump — not
-the migration history — is what reproduces the real schema.
+Calls the public.schema_dump() RPC over PostgREST (Supabase keys from .env) and
+assembles the current public schema. The live catalog is the source of truth (25
+of 39 tables predate the migration tracker), so this file — not the migrations —
+reproduces the schema.
+
+    python3 scripts/gen_schema.py            # rewrite supabase/schema.sql
+    python3 scripts/gen_schema.py --check    # exit 1 (with a diff) if it drifted
+
+No DB password needed (that's why this exists): the RPC runs the catalog
+introspection server-side and returns DDL rows. Output is deterministic (sorted,
+no timestamp) so --check is a clean comparison.
 """
 import os
+import sys
 import json
-import datetime
 import urllib.request
+import difflib
 
 SECTIONS = {
     0: "Sequences",
@@ -23,51 +30,87 @@ SECTIONS = {
     7: "Row-Level Security (enable)",
     8: "Policies",
 }
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SCHEMA_PATH = os.path.join(ROOT, "supabase", "schema.sql")
 
 
 def load_env(p="/opt/bearings-rs/.env"):
-    d = {}
-    for line in open(p):
-        line = line.strip()
-        if line and "=" in line and not line.startswith("#"):
-            k, v = line.split("=", 1)
-            d[k.strip()] = v.strip()
-    return d
+    if os.path.exists(p):
+        for line in open(p):
+            line = line.strip()
+            if line and "=" in line and not line.startswith("#"):
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip())
 
 
-e = load_env()
-url, key = e["SUPABASE_URL"], e["SUPABASE_SERVICE_ROLE_KEY"]
-req = urllib.request.Request(
-    f"{url}/rest/v1/_schema_dump?select=seq,kind,name,ddl&order=seq,name",
-    headers={"apikey": key, "Authorization": f"Bearer {key}", "Accept": "application/json"},
-)
-rows = json.load(urllib.request.urlopen(req, timeout=30))
-assert rows, "no rows from _schema_dump (PostgREST schema cache not reloaded?)"
+def fetch_rows():
+    load_env()
+    url = os.environ["SUPABASE_URL"]
+    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    req = urllib.request.Request(
+        f"{url}/rest/v1/rpc/schema_dump",
+        data=b"{}",
+        method="POST",
+        headers={
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    rows = json.load(urllib.request.urlopen(req, timeout=30))
+    assert rows, "schema_dump() returned no rows"
+    rows.sort(key=lambda r: (r["seq"], r["name"]))
+    return rows
 
-bar = "-- " + "=" * 72 + "\n"
-out = [
-    "-- Bearings — database schema (GENERATED from the live catalog; do not hand-edit)\n",
-    f"-- Generated {datetime.date.today().isoformat()}. This is the SCHEMA only (no row data).\n",
-    "--\n",
-    "-- Why catalog-generated, not migrations: 25 of the 39 tables (events, places,\n",
-    "-- clubs, competitions, title_holders, campaigns, ...) were created outside the\n",
-    "-- Supabase migration tracker (dashboard / raw SQL), so the migration history is\n",
-    "-- NOT a complete source of truth. The live catalog is. Regenerate with\n",
-    "-- scripts/gen_schema.py (see supabase/README.md).\n",
-    "--\n",
-    "-- Caveats: catalog-derived, not `pg_dump`. Sequences are emitted bare (no exact\n",
-    "-- start/owned-by); for a byte-exact restore use `supabase db dump`. Good enough to\n",
-    "-- recreate structure and to review the data model.\n\n",
-]
-last_seq = None
-for r in rows:
-    if r["seq"] != last_seq:
-        out.append("\n" + bar)
-        out.append(f"-- {SECTIONS.get(r['seq'], r['kind'])}\n")
-        out.append(bar)
-        last_seq = r["seq"]
-    out.append(r["ddl"].rstrip() + "\n\n")
 
-with open("supabase/schema.sql", "w", encoding="utf-8", newline="\n") as f:
-    f.write("".join(out))
-print(f"WROTE supabase/schema.sql — {len(rows)} objects, {os.path.getsize('supabase/schema.sql')} bytes")
+def render(rows):
+    bar = "-- " + "=" * 72 + "\n"
+    out = [
+        "-- Bearings — database schema (GENERATED from the live catalog; do not hand-edit)\n",
+        "-- Regenerate / check: scripts/gen_schema.py [--check]  (see supabase/README.md)\n",
+        "-- The live catalog is the source of truth — 25 of 39 tables predate the migration\n",
+        "-- tracker, so this generated file (not the migrations) reproduces the schema.\n",
+        "-- Catalog-derived, not pg_dump (sequences bare); `supabase db dump` for exact restore.\n",
+    ]
+    last = None
+    for r in rows:
+        if r["seq"] != last:
+            out += ["\n", bar, f"-- {SECTIONS.get(r['seq'], r['kind'])}\n", bar]
+            last = r["seq"]
+        out.append(r["ddl"].rstrip() + "\n\n")
+    return "".join(out)
+
+
+def main():
+    content = render(fetch_rows())
+    if "--check" in sys.argv:
+        current = ""
+        if os.path.exists(SCHEMA_PATH):
+            current = open(SCHEMA_PATH, encoding="utf-8").read()
+        if current == content:
+            print("OK — supabase/schema.sql matches the live database.")
+            return 0
+        sys.stdout.writelines(
+            difflib.unified_diff(
+                current.splitlines(True),
+                content.splitlines(True),
+                "supabase/schema.sql (committed)",
+                "live database",
+                n=1,
+            )
+        )
+        print(
+            "\nDRIFT: supabase/schema.sql is out of date. "
+            "Run `python3 scripts/gen_schema.py` and commit.",
+            file=sys.stderr,
+        )
+        return 1
+    with open(SCHEMA_PATH, "w", encoding="utf-8", newline="\n") as f:
+        f.write(content)
+    print(f"WROTE {SCHEMA_PATH} — {content.count('CREATE TABLE ')} tables, {len(content)} bytes")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

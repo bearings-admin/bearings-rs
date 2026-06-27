@@ -8,9 +8,10 @@ Supabase — the data is standard PostgreSQL and can move to any Postgres host.
 - **`schema.sql`** — the full current public schema (sequences, enums, tables,
   constraints, foreign keys, indexes, views, functions, RLS policies). **Generated
   from the live catalog** (not a `pg_dump` — the app server holds only the REST
-  keys, not the DB password). Regenerated 2026-06-26.
-- **`gen_schema.sql`** + **`../scripts/gen_schema.py`** — the password-free
-  regeneration tooling (see below).
+  keys, not the DB password). Regenerate it with `scripts/gen_schema.py` (below).
+- **`gen_schema.sql`** — definition of the `public.schema_dump()` RPC (already applied)
+  that introspects the catalog server-side. **`../scripts/gen_schema.py`** calls it to
+  regenerate / drift-check `schema.sql` — password-free (see below).
 - **`../deploy/sql/`** — the original hand-written DDL for specific features
   (`places_nearby`, `submissions_table`, `zone_functions`, `user_preferences_wallet`).
 
@@ -30,18 +31,32 @@ Two things make this non-obvious and worth stating plainly:
   code change: apply it, **then regenerate `schema.sql` and commit it in the same PR**,
   so the repo and the database stay in lockstep and reviewers can see the diff.
 
-### Regenerate `schema.sql` (no DB password needed)
+### Regenerate / check `schema.sql` (no DB password needed)
 
 ```sh
-# 1. stage a catalog DDL dump into a temp table (Supabase SQL editor, or the MCP):
-#    run supabase/gen_schema.sql
-# 2. pull it over PostgREST and write schema.sql (uses the service key in .env):
-python3 scripts/gen_schema.py
-# 3. cleanup:  DROP TABLE public._schema_dump;   (SQL editor / MCP)
+python3 scripts/gen_schema.py            # rewrite supabase/schema.sql from the live DB
+python3 scripts/gen_schema.py --check    # exit 1 (with a diff) if it has drifted
 ```
 
-If you *do* have the DB password (dashboard → Settings → Database), the cleaner
-canonical path is `supabase db dump --schema public -f supabase/schema.sql`.
+It calls the `public.schema_dump()` RPC over PostgREST using the Supabase keys in
+`.env` — no DB password / `pg_dump`. (If you *do* have the DB password, `supabase db
+dump --schema public -f supabase/schema.sql` is the byte-exact alternative.)
+
+### Enforce drift in CI (opt-in)
+
+The CI "Python" job runs `gen_schema.py --check` **only if** the repo has the
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` **Actions secrets** set (it skips
+otherwise, so it never blocks). Enabling it means whoever changes the DB must also
+commit the regenerated `schema.sql` before their next PR can merge. Adding the
+service-role key to Actions is a security choice — it's the owner's call:
+
+```sh
+gh secret set SUPABASE_URL --repo bearings-admin/bearings-rs
+gh secret set SUPABASE_SERVICE_ROLE_KEY --repo bearings-admin/bearings-rs
+```
+
+A scheduled VPS check (it already has the key) is the other option, and catches the
+common case where the DB is changed outside any PR.
 
 ## Authoritative backup (recommended)
 

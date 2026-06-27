@@ -1,16 +1,8 @@
 -- Bearings — database schema (GENERATED from the live catalog; do not hand-edit)
--- Generated 2026-06-26. This is the SCHEMA only (no row data).
---
--- Why catalog-generated, not migrations: 25 of the 39 tables (events, places,
--- clubs, competitions, title_holders, campaigns, ...) were created outside the
--- Supabase migration tracker (dashboard / raw SQL), so the migration history is
--- NOT a complete source of truth. The live catalog is. Regenerate with
--- scripts/gen_schema.py (see supabase/README.md).
---
--- Caveats: catalog-derived, not `pg_dump`. Sequences are emitted bare (no exact
--- start/owned-by); for a byte-exact restore use `supabase db dump`. Good enough to
--- recreate structure and to review the data model.
-
+-- Regenerate / check: scripts/gen_schema.py [--check]  (see supabase/README.md)
+-- The live catalog is the source of truth — 25 of 39 tables predate the migration
+-- tracker, so this generated file (not the migrations) reproduces the schema.
+-- Catalog-derived, not pg_dump (sequences bare); `supabase db dump` for exact restore.
 
 -- ========================================================================
 -- Sequences
@@ -914,23 +906,23 @@ CREATE TABLE watched_feeds (
 -- ========================================================================
 ALTER TABLE agent_inbox ADD CONSTRAINT agent_inbox_reply_to_post_id_fkey FOREIGN KEY (reply_to_post_id) REFERENCES agent_posts(id);
 
-ALTER TABLE agent_posts ADD CONSTRAINT agent_posts_place_id_fkey FOREIGN KEY (place_id) REFERENCES places(id);
-
-ALTER TABLE agent_posts ADD CONSTRAINT agent_posts_history_id_fkey FOREIGN KEY (history_id) REFERENCES bear_history(id);
-
-ALTER TABLE agent_posts ADD CONSTRAINT agent_posts_event_id_fkey FOREIGN KEY (event_id) REFERENCES events(id);
-
-ALTER TABLE agent_posts ADD CONSTRAINT agent_posts_creator_id_fkey FOREIGN KEY (creator_id) REFERENCES creators(id);
+ALTER TABLE agent_posts ADD CONSTRAINT agent_posts_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES campaigns(id);
 
 ALTER TABLE agent_posts ADD CONSTRAINT agent_posts_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id);
 
-ALTER TABLE agent_posts ADD CONSTRAINT agent_posts_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES campaigns(id);
+ALTER TABLE agent_posts ADD CONSTRAINT agent_posts_creator_id_fkey FOREIGN KEY (creator_id) REFERENCES creators(id);
+
+ALTER TABLE agent_posts ADD CONSTRAINT agent_posts_event_id_fkey FOREIGN KEY (event_id) REFERENCES events(id);
+
+ALTER TABLE agent_posts ADD CONSTRAINT agent_posts_history_id_fkey FOREIGN KEY (history_id) REFERENCES bear_history(id);
+
+ALTER TABLE agent_posts ADD CONSTRAINT agent_posts_place_id_fkey FOREIGN KEY (place_id) REFERENCES places(id);
 
 ALTER TABLE bear_future_proposals ADD CONSTRAINT bear_future_proposals_applicant_club_id_fkey FOREIGN KEY (applicant_club_id) REFERENCES clubs(id);
 
-ALTER TABLE bear_history ADD CONSTRAINT bear_history_creator_id_fkey FOREIGN KEY (creator_id) REFERENCES creators(id);
-
 ALTER TABLE bear_history ADD CONSTRAINT bear_history_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id);
+
+ALTER TABLE bear_history ADD CONSTRAINT bear_history_creator_id_fkey FOREIGN KEY (creator_id) REFERENCES creators(id);
 
 ALTER TABLE bear_history ADD CONSTRAINT bear_history_event_id_fkey FOREIGN KEY (event_id) REFERENCES events(id);
 
@@ -946,9 +938,9 @@ ALTER TABLE creator_event_links ADD CONSTRAINT creator_event_links_creator_id_fk
 
 ALTER TABLE creator_event_links ADD CONSTRAINT creator_event_links_event_id_fkey FOREIGN KEY (event_id) REFERENCES events(id);
 
-ALTER TABLE digital_space_event_links ADD CONSTRAINT digital_space_event_links_event_id_fkey FOREIGN KEY (event_id) REFERENCES events(id);
-
 ALTER TABLE digital_space_event_links ADD CONSTRAINT digital_space_event_links_digital_space_id_fkey FOREIGN KEY (digital_space_id) REFERENCES digital_spaces(id);
+
+ALTER TABLE digital_space_event_links ADD CONSTRAINT digital_space_event_links_event_id_fkey FOREIGN KEY (event_id) REFERENCES events(id);
 
 ALTER TABLE digital_spaces ADD CONSTRAINT digital_spaces_linked_club_id_fkey FOREIGN KEY (linked_club_id) REFERENCES clubs(id);
 
@@ -958,27 +950,27 @@ ALTER TABLE event_place_links ADD CONSTRAINT event_place_links_event_id_fkey FOR
 
 ALTER TABLE event_place_links ADD CONSTRAINT event_place_links_place_id_fkey FOREIGN KEY (place_id) REFERENCES places(id) ON DELETE CASCADE;
 
-ALTER TABLE media ADD CONSTRAINT media_event_id_fkey FOREIGN KEY (event_id) REFERENCES events(id);
-
 ALTER TABLE media ADD CONSTRAINT media_creator_id_fkey FOREIGN KEY (creator_id) REFERENCES creators(id);
 
-ALTER TABLE sponsor_event_links ADD CONSTRAINT sponsor_event_links_sponsor_id_fkey FOREIGN KEY (sponsor_id) REFERENCES sponsors(id) ON DELETE CASCADE;
+ALTER TABLE media ADD CONSTRAINT media_event_id_fkey FOREIGN KEY (event_id) REFERENCES events(id);
 
 ALTER TABLE sponsor_event_links ADD CONSTRAINT sponsor_event_links_event_id_fkey FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE;
 
-ALTER TABLE stories ADD CONSTRAINT stories_creator_id_fkey FOREIGN KEY (creator_id) REFERENCES creators(id);
+ALTER TABLE sponsor_event_links ADD CONSTRAINT sponsor_event_links_sponsor_id_fkey FOREIGN KEY (sponsor_id) REFERENCES sponsors(id) ON DELETE CASCADE;
 
 ALTER TABLE stories ADD CONSTRAINT stories_bear_history_id_fkey FOREIGN KEY (bear_history_id) REFERENCES bear_history(id);
 
 ALTER TABLE stories ADD CONSTRAINT stories_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id);
 
+ALTER TABLE stories ADD CONSTRAINT stories_creator_id_fkey FOREIGN KEY (creator_id) REFERENCES creators(id);
+
 ALTER TABLE stories ADD CONSTRAINT stories_event_id_fkey FOREIGN KEY (event_id) REFERENCES events(id);
 
-ALTER TABLE title_holders ADD CONSTRAINT title_holders_event_id_fkey FOREIGN KEY (event_id) REFERENCES events(id);
+ALTER TABLE title_holders ADD CONSTRAINT title_holders_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id);
 
 ALTER TABLE title_holders ADD CONSTRAINT title_holders_competition_id_fkey FOREIGN KEY (competition_id) REFERENCES competitions(id);
 
-ALTER TABLE title_holders ADD CONSTRAINT title_holders_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id);
+ALTER TABLE title_holders ADD CONSTRAINT title_holders_event_id_fkey FOREIGN KEY (event_id) REFERENCES events(id);
 
 
 -- ========================================================================
@@ -987,6 +979,8 @@ ALTER TABLE title_holders ADD CONSTRAINT title_holders_club_id_fkey FOREIGN KEY 
 CREATE INDEX agent_actions_created_idx ON public.agent_actions USING btree (created_at DESC);
 
 CREATE INDEX artifacts_entity_idx ON public.artifacts USING btree (entity_type, entity_id);
+
+CREATE UNIQUE INDEX events_active_unique_name_date_city ON public.events USING btree (lower(name), start_date, lower(COALESCE(city, ''::text))) WHERE active;
 
 CREATE INDEX idx_code_crate ON public.code USING btree (crate);
 
@@ -2123,15 +2117,7 @@ ALTER TABLE watched_feeds ENABLE ROW LEVEL SECURITY;
 -- ========================================================================
 -- Policies
 -- ========================================================================
-CREATE POLICY "artifacts public read" ON artifacts AS PERMISSIVE FOR SELECT TO anon, authenticated USING (active);
-
-CREATE POLICY bear_regions_public_read ON bear_regions AS PERMISSIVE FOR SELECT TO public USING (true);
-
-CREATE POLICY kindred_sources_public_read ON kindred_sources AS PERMISSIVE FOR SELECT TO public USING ((active = true));
-
 CREATE POLICY "No public read agent_inbox" ON agent_inbox AS PERMISSIVE FOR SELECT TO public USING (false);
-
-CREATE POLICY operating_costs_public_read ON operating_costs AS PERMISSIVE FOR SELECT TO public USING (true);
 
 CREATE POLICY "Public insert newsletter" ON newsletter_subscribers AS PERMISSIVE FOR INSERT TO public WITH CHECK (true);
 
@@ -2150,8 +2136,6 @@ CREATE POLICY "Public read bear_future_proposals" ON bear_future_proposals AS PE
 CREATE POLICY "Public read bear_history" ON bear_history AS PERMISSIVE FOR SELECT TO public USING ((active = true));
 
 CREATE POLICY "Public read campaigns" ON campaigns AS PERMISSIVE FOR SELECT TO public USING ((active = true));
-
-CREATE POLICY "public read candidates" ON candidate_events AS PERMISSIVE FOR SELECT TO public USING (true);
 
 CREATE POLICY "Public read clubs" ON clubs AS PERMISSIVE FOR SELECT TO public USING ((active = true));
 
@@ -2197,9 +2181,19 @@ CREATE POLICY "Public read title_holders" ON title_holders AS PERMISSIVE FOR SEL
 
 CREATE POLICY "Public read user_preferences" ON user_preferences AS PERMISSIVE FOR SELECT TO public USING (true);
 
-CREATE POLICY "public read watched_feeds" ON watched_feeds AS PERMISSIVE FOR SELECT TO public USING (true);
-
 CREATE POLICY "Public update user_preferences" ON user_preferences AS PERMISSIVE FOR UPDATE TO public USING (true);
+
+CREATE POLICY "artifacts public read" ON artifacts AS PERMISSIVE FOR SELECT TO anon, authenticated USING (active);
+
+CREATE POLICY bear_regions_public_read ON bear_regions AS PERMISSIVE FOR SELECT TO public USING (true);
+
+CREATE POLICY kindred_sources_public_read ON kindred_sources AS PERMISSIVE FOR SELECT TO public USING ((active = true));
+
+CREATE POLICY operating_costs_public_read ON operating_costs AS PERMISSIVE FOR SELECT TO public USING (true);
+
+CREATE POLICY "public read candidates" ON candidate_events AS PERMISSIVE FOR SELECT TO public USING (true);
+
+CREATE POLICY "public read watched_feeds" ON watched_feeds AS PERMISSIVE FOR SELECT TO public USING (true);
 
 CREATE POLICY public_read ON future_ideas AS PERMISSIVE FOR SELECT TO public USING ((active = true));
 
