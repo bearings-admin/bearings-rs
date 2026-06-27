@@ -535,8 +535,12 @@ def queue_lineage_proposal(target, h):
 def run_lineage():
     targets = supa_get(
         "titleholder_lineage_status?select=title_name,competition_id,country,"
-        "first_year,last_year,holders,held_years"
-        f"&order=holders.asc&limit={LINEAGE_LIMIT}"
+        "first_year,last_year,holders,gap_years,held_years"
+        # Only titles worth researching: an interior gap, or very thin (≤2 holders,
+        # likely truncated). Biggest gaps first so we hit Poland/Montréal, not the
+        # obscure single-entry titles.
+        "&or=(gap_years.gt.0,holders.lte.2)"
+        f"&order=gap_years.desc,holders.asc&limit={LINEAGE_LIMIT}"
     )
     this_year = date.today().year
     print(
