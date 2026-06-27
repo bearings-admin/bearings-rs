@@ -343,6 +343,16 @@ pub fn translations() -> &'static I18nStore {
         en.insert("forecast.not_announced", "Specific dates not yet announced \u{2014} projected from past years");
         en.insert("forecast.tentative", "tentative");
         en.insert("artifact.source", "Source");
+        // Transparency — kindred sources / feeds / AI band
+        en.insert("transp.kindred_h", "Kindred sources");
+        en.insert("transp.kindred_sub", "The guides, magazines and archives we lean on.");
+        en.insert("transp.kindred_blurb", "We don\u{2019}t sell ads. These are resources we rely on and admire \u{2014} go support them.");
+        en.insert("transp.feeds_h", "Feeds we read");
+        en.insert("transp.feeds_sub", "Public iCal &amp; RSS sources our agents check nightly.");
+        en.insert("transp.feeds_blurb", "Our nightly reader pulls these public iCal &amp; RSS feeds from community organisers \u{2014} many of the events you see start here. Thank you for keeping them open.");
+        en.insert("transp.ai_h", "How we use AI");
+        en.insert("transp.ai_sub", "Disclosed, like our affiliates and our costs.");
+        en.insert("transp.ai_body", "Research is assisted by AI agents \u{2014} a nightly feed reader and a weekly \u{201c}keeper.\u{201d} They <strong>propose, never publish</strong>: a human approves every change. Records sourced from others carry that source in their notes, and primary-source evidence (photos, plaques, documents) is preserved as artifacts in the Archive.");
         store.insert("en", en);
         // ES — 273 keys
         let mut es: LangMap = HashMap::new();
@@ -653,6 +663,16 @@ pub fn translations() -> &'static I18nStore {
         es.insert("forecast.not_announced", "Fechas concretas aún no anunciadas \u{2014} proyectadas a partir de años anteriores");
         es.insert("forecast.tentative", "tentativo");
         es.insert("artifact.source", "Fuente");
+        // Transparency — kindred sources / feeds / AI band
+        es.insert("transp.kindred_h", "Recursos afines");
+        es.insert("transp.kindred_sub", "Las guías, revistas y archivos en los que nos apoyamos.");
+        es.insert("transp.kindred_blurb", "No vendemos publicidad. Son recursos en los que confiamos y que admiramos \u{2014} ve a apoyarlos.");
+        es.insert("transp.feeds_h", "Fuentes que leemos");
+        es.insert("transp.feeds_sub", "Fuentes públicas iCal y RSS que nuestros agentes revisan cada noche.");
+        es.insert("transp.feeds_blurb", "Nuestro lector nocturno extrae estas fuentes públicas iCal y RSS de organizadores comunitarios \u{2014} muchos de los eventos que ves empiezan aquí. Gracias por mantenerlas abiertas.");
+        es.insert("transp.ai_h", "Cómo usamos la IA");
+        es.insert("transp.ai_sub", "Divulgado, como nuestros afiliados y nuestros costes.");
+        es.insert("transp.ai_body", "La investigación cuenta con la ayuda de agentes de IA \u{2014} un lector de fuentes nocturno y un \u{201c}guardián\u{201d} semanal. <strong>Proponen, nunca publican</strong>: una persona aprueba cada cambio. Los registros obtenidos de terceros llevan esa fuente en sus notas, y la evidencia de fuente primaria (fotos, placas, documentos) se conserva como artefactos en el Archivo.");
         store.insert("es", es);
         // FR — 273 keys
         let mut fr: LangMap = HashMap::new();
@@ -963,6 +983,16 @@ pub fn translations() -> &'static I18nStore {
         fr.insert("forecast.not_announced", "Dates précises pas encore annoncées \u{2014} projetées d'après les années passées");
         fr.insert("forecast.tentative", "provisoire");
         fr.insert("artifact.source", "Source");
+        // Transparency — kindred sources / feeds / AI band
+        fr.insert("transp.kindred_h", "Ressources sœurs");
+        fr.insert("transp.kindred_sub", "Les guides, magazines et archives sur lesquels nous nous appuyons.");
+        fr.insert("transp.kindred_blurb", "Nous ne vendons pas de publicité. Ce sont des ressources sur lesquelles nous comptons et que nous admirons \u{2014} allez les soutenir.");
+        fr.insert("transp.feeds_h", "Les flux que nous lisons");
+        fr.insert("transp.feeds_sub", "Sources publiques iCal et RSS que nos agents consultent chaque nuit.");
+        fr.insert("transp.feeds_blurb", "Notre lecteur nocturne récupère ces flux publics iCal et RSS d\u{2019}organisateurs communautaires \u{2014} beaucoup des événements que vous voyez commencent ici. Merci de les garder ouverts.");
+        fr.insert("transp.ai_h", "Comment nous utilisons l\u{2019}IA");
+        fr.insert("transp.ai_sub", "Divulgué, comme nos affiliés et nos coûts.");
+        fr.insert("transp.ai_body", "La recherche est assistée par des agents IA \u{2014} un lecteur de flux nocturne et un \u{201c}gardien\u{201d} hebdomadaire. Ils <strong>proposent, ne publient jamais</strong> : un humain approuve chaque changement. Les enregistrements provenant d\u{2019}autres sources en portent la source dans leurs notes, et les preuves de source primaire (photos, plaques, documents) sont conservées comme artefacts dans les Archives.");
         store.insert("fr", fr);
 
         let mut ja: LangMap = HashMap::new();
