@@ -86,6 +86,35 @@ BACKFILL_PROMPT = (
 LINEAGE_PROMPT = (
     load_directive("lineage_harvest.md") if MISSION == "lineage" else ""
 )
+DISCOVER_PROMPT = (
+    load_directive("in_language_discovery.md") if MISSION == "discover" else ""
+)
+
+# In-language discovery rotation: one language per weekday (Mon=0 .. Sun=6). The
+# keeper otherwise searches only in English, so this is the seam that reaches
+# local-language listings (esp. Southern-hemisphere summer events that fill the
+# Northern-winter gap). Override a run with KEEPER_LANG=<language>.
+LANG_ROTATION = [
+    ("Portuguese", ["Brazil", "Portugal"]),                                    # Mon
+    ("Spanish", ["Mexico", "Spain", "Argentina", "Chile", "Colombia",
+                 "Costa Rica", "Uruguay", "Venezuela", "Puerto Rico"]),        # Tue
+    ("German", ["Germany", "Austria", "Switzerland"]),                         # Wed
+    ("Italian", ["Italy"]),                                                    # Thu
+    ("French", ["France", "Belgium", "Canada", "Switzerland", "Luxembourg"]),  # Fri
+    ("Thai", ["Thailand"]),                                                    # Sat
+    ("Dutch", ["Netherlands", "Belgium"]),                                     # Sun
+]
+
+
+def todays_language():
+    """Return (language, [countries]) — KEEPER_LANG overrides the weekday rotation."""
+    forced = os.environ.get("KEEPER_LANG", "").strip()
+    if forced:
+        for lang, countries in LANG_ROTATION:
+            if lang.lower() == forced.lower():
+                return lang, countries
+        return forced, [forced]  # unknown language: search it broadly
+    return LANG_ROTATION[date.today().weekday()]
 
 
 def supa_get(path):
@@ -202,6 +231,11 @@ def next_edition_name(name, year):
 def _norm(s):
     """Lowercase + collapse whitespace for tolerant substring comparison."""
     return re.sub(r"\s+", " ", (s or "").lower()).strip()
+
+
+def _event_key(name):
+    """Dedup key: drop a trailing edition year so 'X Bear Pride 2026' == 'X Bear Pride'."""
+    return _norm(re.sub(r"\s*\b(19|20)\d{2}\b\s*$", "", name or ""))
 
 
 def evidence_in_page(evidence, page):
@@ -591,11 +625,96 @@ def run_lineage():
     )
 
 
+def queue_discovery(lang, ev):
+    start = (ev.get("start_date") or "").strip()
+    end = (ev.get("end_date") or "").strip()
+    cand = {
+        "raw_title": (ev.get("name") or "").strip(),
+        "raw_description": (
+            f"Keeper in-language discovery ({lang}, {MODEL}). "
+            f"{ev.get('city') or ''}. Evidence: {(ev.get('evidence') or '')[:200]}"
+        ),
+        "raw_date": (start.replace("-", "") if start else None),
+        "parsed_start": start or None,
+        "parsed_end": end or None,
+        "parsed_city": ev.get("city") or None,
+        "parsed_country": ev.get("country") or None,
+        "parsed_type": ev.get("type") or "bear-run",
+        "source_url": (ev.get("source_url") or "")[:300] or None,
+        "status": "pending",
+    }
+    cand = {k: v for k, v in cand.items() if v is not None}
+    created = supa_post(
+        "candidate_events",
+        cand,
+        prefer="resolution=ignore-duplicates,return=representation",
+    )
+    return created[0]["id"] if isinstance(created, list) and created else None
+
+
+def run_discover():
+    lang, countries = todays_language()
+    # Existing active events in these countries — dedup hint for Claude + a hard
+    # code-side dedup before we queue anything.
+    all_ev = supa_get("events?select=name,country&active=eq.true&limit=1000")
+    cset = set(countries)
+    in_scope = [e["name"] for e in all_ev if e.get("country") in cset]
+    have = {_event_key(n) for n in in_scope}  # year-stripped so "X 2026" == "X"
+    have_names = in_scope[:60]
+    prompt = (
+        DISCOVER_PROMPT.replace("{{LANG}}", lang)
+        .replace("{{COUNTRIES}}", ", ".join(countries))
+        .replace("{{EXISTING}}", "; ".join(have_names) or "(none yet)")
+    )
+    print(
+        f"[keeper] in-language discovery: {lang} — {', '.join(countries)} "
+        f"(model={MODEL})\n"
+    )
+    try:
+        out = claude(prompt, tools=WEB_SEARCH_TOOL, max_tokens=2500)
+    except Exception as e:
+        print(f"  ! search failed — {e}")
+        return
+    today = date.today().isoformat()
+    queued = 0
+    for ev in parse_json_list(out):
+        name = (ev.get("name") or "").strip()
+        start = (ev.get("start_date") or "").strip()
+        if not name or not start or not ev.get("source_url"):
+            continue
+        if start < today:  # discovery is forward-looking; past editions are backfill's job
+            print(f"  ·  {name}: skipped (past — {start})")
+            continue
+        if _event_key(name) in have:
+            print(f"  ·  {name}: already have it")
+            continue
+        have.add(_event_key(name))  # guard against dups within this batch
+        cid = queue_discovery(lang, ev)
+        audit(
+            "discover",
+            cid,
+            None,
+            {"sample_name": name},
+            {"evidence": ev.get("evidence", "")},
+            f"{lang}: {ev.get('country', '')}",
+        )
+        queued += 1
+        print(
+            f"  +  {name} ({ev.get('city', '')}, {start}) -> queued (cand {cid})"
+        )
+    print(
+        f"\n[keeper] in-language discovery ({lang}): {queued} new event(s) "
+        f"queued for steward review (no auto-insert)."
+    )
+
+
 def main():
     if MISSION == "backfill":
         run_backfill()
     elif MISSION == "lineage":
         run_lineage()
+    elif MISSION == "discover":
+        run_discover()
     else:
         run_forecast()
 
