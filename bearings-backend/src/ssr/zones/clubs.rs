@@ -22,7 +22,7 @@ pub(crate) async fn zone_clubs(db: SupabaseClient, lang: &str) -> Response {
         let city  = esc(c.city.as_deref().unwrap_or(""));
         let ctry  = esc(c.country.as_deref().unwrap_or(""));
         let yr    = c.founded_year.map(|y| format!(" (est. {y})")).unwrap_or_default();
-        let desc  = esc(c.description.as_deref().unwrap_or(""));
+        let desc  = esc(&crate::content_tx::tc(c.description.as_deref().unwrap_or(""), lang));
         let site  = esc(c.website.as_deref().unwrap_or(""));
         let site_html = if !site.is_empty() && site != "#" {
             format!("<a href=\"{site}\" target=\"_blank\" rel=\"noopener\" class=\"btn-t\">Site</a>")
