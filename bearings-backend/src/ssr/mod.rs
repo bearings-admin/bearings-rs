@@ -103,10 +103,13 @@ impl Zone {
 // ── Root dispatcher ───────────────────────────────────────────────────────────
 
 pub async fn root(State(db): State<SupabaseClient>, Query(q): Query<ZoneQuery>) -> Response {
+    // Six site languages (CONST-4): EN/ES/FR baked + DE/PT/TH. Unknown -> English.
     let lang_owned = match q.lang.as_deref() {
         Some("es") => "es",
         Some("fr") => "fr",
-        Some("ja") => "ja",
+        Some("de") => "de",
+        Some("pt") => "pt",
+        Some("th") => "th",
         _ => "en",
     };
     match Zone::parse(q.zone.as_deref().unwrap_or("coming-up")) {
