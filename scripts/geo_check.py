@@ -20,6 +20,7 @@ Tune:     GEO_GEOCODE (1/0), GEO_MAX_KM (25), GEO_SLEEP (1.1s), GEO_LIMIT (0 = a
 import json
 import math
 import os
+import re
 import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -99,16 +100,25 @@ def is_cruise(place):
             or any(w in city for w in CRUISE_WORDS))
 
 
-def geocode(city, country):
-    """Nominatim/OSM lookup of 'city, country' -> (lat, lng) or None."""
-    q = ", ".join([p for p in [city, country] if p])
-    url = f"https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q={quote(q)}"
+def geocode(query):
+    """Nominatim/OSM lookup of a free-form query string -> (lat, lng) or None."""
+    url = f"https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q={quote(query)}"
     try:
         with urlopen(Request(url, headers={"User-Agent": UA}), timeout=20) as r:
             data = json.loads(r.read())
         return (float(data[0]["lat"]), float(data[0]["lon"])) if data else None
     except (HTTPError, URLError, ValueError, KeyError, IndexError, OSError):
         return None
+
+
+def geocode_place(place):
+    """Geocode from the `address` — it carries the state/region needed to disambiguate
+    same-named cities (Granite Falls WA vs MN, Del Rio TN vs TX). Returns None when there's
+    no structured (comma-bearing) address: a bare 'city, country' is too ambiguous to
+    compare against, and those rows are already covered by Tier-1 placeholder/missing checks.
+    Keeps Tier 2 high-precision (few false positives)."""
+    addr = re.sub(r"\s*\([^)]*\)", "", place.get("address") or "").strip()
+    return geocode(addr) if addr.count(",") >= 1 else None
 
 
 def run():
@@ -143,13 +153,13 @@ def run():
             if lat is None or lng is None or is_cruise(p) or not city:
                 continue
             lat, lng = float(lat), float(lng)
-            if lat == 0 and lng == 0:
+            if (lat == 0 and lng == 0) or is_placeholder(lat, lng):
+                continue  # already flagged by Tier 1 — don't double-report as mislocated
+            g = geocode_place(p)
+            if g is None:
                 continue
-            g = geocode(city, p.get("country") or "")
             geocoded += 1
             time.sleep(GEO_SLEEP)
-            if not g:
-                continue
             d = haversine_km(lat, lng, g[0], g[1])
             if d > MAX_KM:
                 mislocated.append(

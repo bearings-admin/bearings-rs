@@ -64,12 +64,36 @@ def _with_urlopen(payload, fn):
 
 def test_geocode_parses_result():
     got = _with_urlopen([{"lat": "38.502", "lon": "-123.000"}],
-                        lambda: gc.geocode("Guerneville", "USA"))
+                        lambda: gc.geocode("Guerneville, USA"))
     assert got == (38.502, -123.0)
 
 
 def test_geocode_empty_is_none():
-    assert _with_urlopen([], lambda: gc.geocode("Nowhere", "USA")) is None
+    assert _with_urlopen([], lambda: gc.geocode("Nowhere, USA")) is None
+
+
+def test_geocode_place_prefers_address_with_state():
+    # the address carries the state (disambiguates Granite Falls WA vs MN) and the
+    # parenthetical is stripped
+    captured = {}
+
+    def fake(req, timeout=0):
+        captured["url"] = req.full_url
+        return _Resp([{"lat": "48.08", "lon": "-121.97"}])
+
+    orig = gc.urlopen
+    gc.urlopen = fake
+    try:
+        gc.geocode_place({"address": "Granite Falls, WA, USA (Mountain Loop Hwy)",
+                          "city": "Granite Falls", "country": "USA"})
+    finally:
+        gc.urlopen = orig
+    assert "WA" in captured["url"] and "Mountain" not in captured["url"]
+
+
+def test_geocode_place_skips_bare_city():
+    # no structured address -> None, without hitting the network (too ambiguous to trust)
+    assert gc.geocode_place({"address": None, "city": "Albion", "country": "USA"}) is None
 
 
 if __name__ == "__main__":
