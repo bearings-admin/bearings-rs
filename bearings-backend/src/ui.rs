@@ -47,21 +47,28 @@ pub(crate) fn shell(
     let tl = |key: &str| i18n::t(i18n, lang, key);
 
     // Language switcher
-    let lang_switcher: String = [("en", "EN"), ("es", "ES"), ("fr", "FR"), ("ja", "JA")]
-        .iter()
-        .map(|(code, label)| {
-            let active_style = if *code == lang {
-                format!("background:{BROWN};color:#fff")
-            } else {
-                format!("background:transparent;color:{MID}")
-            };
-            format!(
-                "<a href=\"/?zone={active}&lang={code}\" \
+    let lang_switcher: String = [
+        ("en", "EN"),
+        ("es", "ES"),
+        ("fr", "FR"),
+        ("de", "DE"),
+        ("pt", "PT"),
+        ("th", "TH"),
+    ]
+    .iter()
+    .map(|(code, label)| {
+        let active_style = if *code == lang {
+            format!("background:{BROWN};color:#fff")
+        } else {
+            format!("background:transparent;color:{MID}")
+        };
+        format!(
+            "<a href=\"/?zone={active}&lang={code}\" \
                style=\"font-size:10px;font-weight:700;padding:3px 7px;\
                        border-radius:999px;text-decoration:none;{active_style}\">{label}</a>"
-            )
-        })
-        .collect();
+        )
+    })
+    .collect();
 
     // Bottom nav — 4 temporal zones, inline SVG icons
     let tnav_svg = |zone: &str, label: &str, svg: &str| {
