@@ -444,11 +444,22 @@ def main():
 
     try:
         pending_count = len(api_get("candidate_events?status=eq.pending&select=id"))
+        pending_th = len(api_get("candidate_title_holders?status=eq.pending&select=id"))
     except Exception:
-        pending_count = -1
+        pending_count, pending_th = -1, -1
+
+    # Agent-fleet activity over the last 7 days, grouped by action, for the digest.
+    try:
+        since = date.fromordinal(date.today().toordinal() - 7).isoformat()
+        agents_7d = {}
+        for a in api_get(f"agent_actions?select=action&created_at=gte.{since}"):
+            k = a.get("action") or "?"
+            agents_7d[k] = agents_7d.get(k, 0) + 1
+    except Exception:
+        agents_7d = None
 
     digest = build_digest(ts, stats, total_new, total_past, pending_count, gaps,
-                          archived, predictions)
+                          archived, predictions, pending_th=pending_th, agents_7d=agents_7d)
     write_log(digest)
     send_digest(digest)
 

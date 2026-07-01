@@ -91,6 +91,45 @@ def test_parse_json_tolerant():
     assert k.parse_json("not json at all") == {}
 
 
+def _with_fetch(stub):
+    """Swap keeper.fetch_text for a stub (works under pytest and the standalone runner)."""
+    orig = k.fetch_text
+    k.fetch_text = stub
+    return orig
+
+
+def test_verify_evidence_verified():
+    orig = _with_fetch(lambda url: "The 2027 edition runs January 24-31, 2027 in PV.")
+    try:
+        assert k.verify_evidence("https://x.com", "runs January 24-31, 2027") == "verified"
+    finally:
+        k.fetch_text = orig
+
+
+def test_verify_evidence_unverified_when_quote_absent():
+    orig = _with_fetch(lambda url: "totally unrelated page content here")
+    try:
+        assert k.verify_evidence("https://x.com", "runs January 24-31, 2027") == "unverified"
+    finally:
+        k.fetch_text = orig
+
+
+def test_verify_evidence_unchecked_without_source():
+    assert k.verify_evidence("", "anything") == "unchecked"
+    assert k.verify_evidence("not-a-url", "anything") == "unchecked"
+
+
+def test_verify_evidence_unchecked_on_fetch_error():
+    def boom(url):
+        raise RuntimeError("timeout")
+
+    orig = _with_fetch(boom)
+    try:
+        assert k.verify_evidence("https://x.com", "runs January 24-31, 2027") == "unchecked"
+    finally:
+        k.fetch_text = orig
+
+
 if __name__ == "__main__":
     # Standalone runner (no pytest needed): run every test_* and report.
     tests = [v for n, v in sorted(globals().items()) if n.startswith("test_") and callable(v)]

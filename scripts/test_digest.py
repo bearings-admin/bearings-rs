@@ -105,6 +105,26 @@ def test_send_digest_no_transport_is_log_only():
     d.send_digest({"subject": "s", "body": "b"})  # must not raise / touch the network
 
 
+def test_build_digest_titleholder_queue_and_agent_health():
+    dig = d.build_digest(
+        "2026-06-27T00:00:00Z", stats=[], total_new=5, total_past=0, pending_count=3, gaps=[],
+        pending_th=4, agents_7d={"discover": 6, "auto_apply": 2, "lineage": 1},
+    )
+    b = dig["body"]
+    assert "3 events, 4 titleholder proposals" in b
+    assert "Agents (last 7 days) — 9 action(s):" in b
+    assert "discover: 6" in b
+    assert dig["subject"].endswith("7 pending")  # 3 events + 4 titleholder proposals
+
+
+def test_build_digest_warns_when_backlog_builds():
+    dig = d.build_digest(
+        "2026-06-27T00:00:00Z", stats=[], total_new=0, total_past=0, pending_count=38, gaps=[],
+        pending_th=5,  # 38 + 5 = 43 >= 40
+    )
+    assert "Review backlog is building" in dig["body"]
+
+
 if __name__ == "__main__":
     tests = [v for n, v in sorted(globals().items()) if n.startswith("test_") and callable(v)]
     failed = 0

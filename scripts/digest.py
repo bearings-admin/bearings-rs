@@ -13,12 +13,12 @@ from urllib.request import Request, urlopen
 
 
 def build_digest(ts, stats, total_new, total_past, pending_count, gaps,
-                 archived=None, predictions=None):
+                 archived=None, predictions=None, pending_th=0, agents_7d=None):
     day = ts[:10]
     L = [f"Bearings nightly research digest — {day} (UTC)", ""]
     L.append(f"New candidates queued:  {total_new}")
     L.append(f"Past-dated skipped:     {total_past}")
-    L.append(f"Pending review queue:   {pending_count}")
+    L.append(f"Pending review queue:   {pending_count} events, {pending_th} titleholder proposals")
     L.append(f"Title-holder gaps:      {len(gaps)}")
     L.append(f"Archived (date passed): {len(archived) if archived else 0}")
     L.append(f"Likely repeats ahead:   {len(predictions) if predictions else 0}")
@@ -39,9 +39,19 @@ def build_digest(ts, stats, total_new, total_past, pending_count, gaps,
         for p in predictions:
             L.append(f"  - {p.get('sample_name','')} ({p.get('city','')}) "
                      f"~ {p.get('predicted_date','')} [{p.get('confidence','')}]")
+    if agents_7d:
+        # Agent-fleet health: what the agents did in the last 7 days (from agent_actions),
+        # so the fleet stays observable and the review queue never silently piles up.
+        total = sum(agents_7d.values())
+        L += ["", f"Agents (last 7 days) — {total} action(s):"]
+        for action, n in sorted(agents_7d.items(), key=lambda kv: (-kv[1], kv[0])):
+            L.append(f"  - {action}: {n}")
+    if pending_count + pending_th >= 40:
+        L += ["", f"⚠ Review backlog is building ({pending_count + pending_th} pending) — "
+                  "worth a review pass."]
     L += ["", "Review queue: https://srv1744879.hstgr.cloud/?zone=admin&token=<ADMIN_TOKEN>"]
     body = "\n".join(L)
-    subject = f"[Bearings] research digest {day}: {total_new} new, {pending_count} pending"
+    subject = f"[Bearings] research digest {day}: {total_new} new, {pending_count + pending_th} pending"
     return {"subject": subject, "body": body}
 
 
