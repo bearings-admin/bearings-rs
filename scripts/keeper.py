@@ -249,6 +249,23 @@ def evidence_in_page(evidence, page):
     return ev in _norm(page)
 
 
+def verify_evidence(source_url, evidence):
+    """Fetch the claimed source and check the model's quote really appears on it —
+    the forecast keeper's auto-apply guard, applied to the (human-reviewed) discovery
+    and lineage proposals so fabricated rows don't reach the review queue. Returns:
+      'verified'   — the quote is on the page,
+      'unverified' — page fetched but the quote is NOT there (likely fabricated),
+      'unchecked'  — no usable source_url, or the page could not be fetched.
+    """
+    if not source_url or not str(source_url).startswith("http"):
+        return "unchecked"
+    try:
+        page = fetch_text(source_url)
+    except Exception:
+        return "unchecked"
+    return "verified" if evidence_in_page(evidence, page) else "unverified"
+
+
 def check(pred):
     year = (pred.get("predicted_date") or "")[:4]
     name = pred.get("sample_name", "")
@@ -544,7 +561,7 @@ def find_lineage(target):
     return {"holders": parse_json_list(out)}
 
 
-def queue_lineage_proposal(target, h):
+def queue_lineage_proposal(target, h, verify="unchecked"):
     year = str(h.get("year") or "")[:4]
     cand = {
         "title_name": target["title_name"],
@@ -553,8 +570,8 @@ def queue_lineage_proposal(target, h):
         "city": h.get("city") or None,
         "country": target.get("country") or None,
         "competition_id": target.get("competition_id"),
-        "source_url": (h.get("source") or "")[:300] or None,
-        "evidence": (h.get("evidence") or "")[:300] or None,
+        "source_url": (h.get("source_url") or h.get("source") or "")[:300] or None,
+        "evidence": (f"[{verify}] " + (h.get("evidence") or ""))[:300] or None,
         "status": "pending",
     }
     cand = {k: v for k, v in cand.items() if v is not None}
@@ -605,7 +622,12 @@ def run_lineage():
             print(f"  ·  {t['title_name']}: no new years found")
             continue
         for h in new:
-            cid = queue_lineage_proposal(t, h)
+            v = verify_evidence(h.get("source_url"), h.get("evidence"))
+            if v == "unverified":
+                print(f"  ·  {t['title_name']} {h.get('year')}: skipped "
+                      "(quote not found on source — likely fabricated)")
+                continue
+            cid = queue_lineage_proposal(t, h, v)
             audit(
                 "lineage",
                 cid,
@@ -625,13 +647,13 @@ def run_lineage():
     )
 
 
-def queue_discovery(lang, ev):
+def queue_discovery(lang, ev, verify="unchecked"):
     start = (ev.get("start_date") or "").strip()
     end = (ev.get("end_date") or "").strip()
     cand = {
         "raw_title": (ev.get("name") or "").strip(),
         "raw_description": (
-            f"Keeper in-language discovery ({lang}, {MODEL}). "
+            f"Keeper in-language discovery ({lang}, {MODEL}; {verify}). "
             f"{ev.get('city') or ''}. Evidence: {(ev.get('evidence') or '')[:200]}"
         ),
         "raw_date": (start.replace("-", "") if start else None),
@@ -688,15 +710,19 @@ def run_discover():
         if _event_key(name) in have:
             print(f"  ·  {name}: already have it")
             continue
+        v = verify_evidence(ev.get("source_url"), ev.get("evidence"))
+        if v == "unverified":
+            print(f"  ·  {name}: skipped (quote not found on source — likely fabricated)")
+            continue
         have.add(_event_key(name))  # guard against dups within this batch
-        cid = queue_discovery(lang, ev)
+        cid = queue_discovery(lang, ev, v)
         audit(
             "discover",
             cid,
             None,
             {"sample_name": name},
             {"evidence": ev.get("evidence", "")},
-            f"{lang}: {ev.get('country', '')}",
+            f"{lang}: {ev.get('country', '')} [{v}]",
         )
         queued += 1
         print(

@@ -27,10 +27,12 @@ Years already in our archive — do NOT return these: {{HAVE}}
 
 Search for the title's hall of fame / past winners / winners by year. Respond with ONLY a
 JSON array (no prose, no markdown fences), one object per winner you can source:
-[{"year": "YYYY", "name": "winner name (first name or handle is fine)", "city": "city if shown or empty", "evidence": "short note including the source"}]
+[{"year": "YYYY", "name": "winner name (first name or handle is fine)", "city": "city if shown or empty", "source_url": "https://exact-page-where-you-found-it", "evidence": "short VERBATIM quote from that page naming the winner/year"}]
 
 Rules:
-- Only include a year you can attribute to a real source; put the source in "evidence".
+- Put the exact page URL in "source_url" and a **verbatim quote** from that page in
+  "evidence" (it is re-fetched and checked — a quote that isn't on the page is dropped).
+- Only include a year you can attribute to a real source.
 - Return ONLY years that are not already in our archive (listed above).
 - Do not invent names; if a year's winner isn't sourceable, omit it.
 - For a holder tied to a country where homosexuality is criminalised, omit the name
