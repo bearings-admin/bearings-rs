@@ -67,6 +67,9 @@ async fn main() -> anyhow::Result<()> {
         limiter.retain_recent();
     });
 
+    // Warm + periodically refresh the content-translation cache (Layer-2 i18n).
+    bearings_backend::spawn_content_refresh(db.clone());
+
     let app = build_app(db).layer(GovernorLayer {
         config: governor_conf,
     });
