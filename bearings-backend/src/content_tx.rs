@@ -26,13 +26,14 @@ fn cache() -> &'static RwLock<HashMap<(String, String), String>> {
 /// Translate dynamic content prose into `lang`. Returns the original text unchanged for
 /// English, empty input, or a cache miss.
 pub fn tc(text: &str, lang: &str) -> String {
-    if lang == "en" || text.trim().is_empty() {
+    let key = text.trim(); // translate.py stores stripped source_text — match it
+    if lang == "en" || key.is_empty() {
         return text.to_string();
     }
     cache()
         .read()
         .unwrap()
-        .get(&(lang.to_string(), text.to_string()))
+        .get(&(lang.to_string(), key.to_string()))
         .cloned()
         .unwrap_or_else(|| text.to_string())
 }
