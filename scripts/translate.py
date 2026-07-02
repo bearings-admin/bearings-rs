@@ -19,8 +19,13 @@ import hashlib
 import json
 import os
 import re
+import socket
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+
+# Hard floor so a stalled connection can't hang the job (a manual run once sat ~3h when a
+# urlopen timeout didn't fire). Every socket op now aborts after 90s.
+socket.setdefaulttimeout(90)
 
 
 def _load_env(p="/opt/bearings-rs/.env"):
@@ -48,6 +53,12 @@ FIELDS = [
     ("places", "description"),
     ("campaigns", "description"),
     ("clubs", "description"),
+    ("bear_history", "description"),
+    ("bear_history", "significance"),
+    ("digital_spaces", "description"),
+    ("stores", "description"),
+    ("creators", "bio"),
+    ("title_holders", "bio"),
 ]
 
 
