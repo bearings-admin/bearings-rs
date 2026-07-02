@@ -5,12 +5,15 @@ use crate::db::{LogErr, SupabaseClient};
 use crate::ui::*;
 use axum::response::{Html, IntoResponse, Response};
 
-fn store_card(st: &StoreRow) -> String {
+fn store_card(st: &StoreRow, lang: &str) -> String {
     let sname = esc(st.name.as_str());
     let stype = esc(st.store_type.as_deref().unwrap_or(""));
     let slink = esc(st.link.as_deref().unwrap_or(""));
     let saff = esc(st.affiliate_link.as_deref().unwrap_or(""));
-    let sdesc = esc(st.description.as_deref().unwrap_or(""));
+    let sdesc = esc(&crate::content_tx::tc(
+        st.description.as_deref().unwrap_or(""),
+        lang,
+    ));
 
     let mut badges: Vec<String> = Vec::new();
     if st.bear_owned.unwrap_or(false) {
@@ -63,13 +66,13 @@ pub(crate) async fn zone_shops(db: SupabaseClient, lang: &str) -> Response {
     if !owned.is_empty() {
         body.push_str(&sh("Bear-owned shops", Some(owned.len())));
         for &s in &owned {
-            body.push_str(&store_card(s));
+            body.push_str(&store_card(s, lang));
         }
     }
     if !other.is_empty() {
         body.push_str(&sh("More gear & marketplaces", Some(other.len())));
         for &s in &other {
-            body.push_str(&store_card(s));
+            body.push_str(&store_card(s, lang));
         }
     }
     Html(shell(
