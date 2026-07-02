@@ -43,14 +43,23 @@ use tower_http::trace::TraceLayer;
 pub fn spawn_content_refresh(db: db::SupabaseClient) {
     tokio::spawn(async move {
         loop {
-            if let Ok(rows) = db
-                .get_json::<Vec<content_tx::ContentTxRow>>(
-                    "content_translations?select=target_lang,source_text,\
-                     translated_text&limit=100000",
-                )
-                .await
-            {
-                content_tx::load(rows);
+            // Fetch per language: PostgREST/Supabase caps a response at 1000 rows, and
+            // each language is well under that — a single unfiltered fetch would silently
+            // truncate and drop most translations.
+            let mut all: Vec<content_tx::ContentTxRow> = Vec::new();
+            for lang in ["de", "es", "fr", "pt", "th"] {
+                if let Ok(mut rows) = db
+                    .get_json::<Vec<content_tx::ContentTxRow>>(&format!(
+                        "content_translations?select=target_lang,source_text,\
+                         translated_text&target_lang=eq.{lang}&limit=5000"
+                    ))
+                    .await
+                {
+                    all.append(&mut rows);
+                }
+            }
+            if !all.is_empty() {
+                content_tx::load(all);
             }
             tokio::time::sleep(std::time::Duration::from_secs(300)).await;
         }
