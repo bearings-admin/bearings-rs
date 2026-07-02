@@ -57,7 +57,7 @@ pub(crate) async fn zone_creators(db: SupabaseClient, lang: &str) -> Response {
         let ctype = esc(c.creator_type.as_deref().unwrap_or("creator"));
         let city = esc(c.city.as_deref().unwrap_or(""));
         let ctry = esc(c.country.as_deref().unwrap_or(""));
-        let bio = esc(c.bio.as_deref().unwrap_or(""));
+        let bio = esc(&crate::content_tx::tc(c.bio.as_deref().unwrap_or(""), lang));
         let site = esc(c.website.as_deref().unwrap_or(""));
         let sp = esc(c.spotify_link.as_deref().unwrap_or(""));
         let yt = esc(c.youtube_link.as_deref().unwrap_or(""));
