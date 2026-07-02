@@ -50,8 +50,9 @@ pub fn spawn_content_refresh(db: db::SupabaseClient) {
             for lang in ["de", "es", "fr", "pt", "th"] {
                 if let Ok(mut rows) = db
                     .get_json::<Vec<content_tx::ContentTxRow>>(&format!(
-                        "content_translations?select=target_lang,source_text,\
-                         translated_text&target_lang=eq.{lang}&limit=5000"
+                        "{}/rest/v1/content_translations?select=target_lang,source_text,\
+                         translated_text&target_lang=eq.{lang}&limit=5000",
+                        db.url
                     ))
                     .await
                 {
