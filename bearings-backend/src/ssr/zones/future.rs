@@ -109,7 +109,7 @@ pub(crate) async fn zone_future(db: SupabaseClient, lang: &str) -> Response {
         let title = esc(h.title_name.as_deref().unwrap_or(""));
         let city  = esc(h.city.as_deref().unwrap_or(""));
         let ctry  = esc(h.country.as_deref().unwrap_or(""));
-        let bio   = esc(h.bio.as_deref().unwrap_or(""));
+        let bio   = esc(&crate::content_tx::tc(h.bio.as_deref().unwrap_or(""), lang));
         let fs: Vec<String> = h.inclusion_flag_codes.clone().unwrap_or_default();
         card(&format!(
             "<div style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:10px\">\

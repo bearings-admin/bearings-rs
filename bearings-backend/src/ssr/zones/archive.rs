@@ -91,7 +91,7 @@ pub(crate) async fn zone_archive(
         }
     };
     let hero = hero_entry
-        .map(|h| build_hero(h, &kicker, cur_year))
+        .map(|h| build_hero(h, &kicker, cur_year, lang))
         .unwrap_or_default();
 
     // ── Single decade-chunked timeline ──────────────────────────
@@ -142,7 +142,7 @@ pub(crate) async fn zone_archive(
                {nodes}\
              </div>",
             ctx = decade_context(label),
-            nodes = build_timeline(&entries, &voices),
+            nodes = build_timeline(&entries, &voices, lang),
         ));
     }
 
@@ -242,15 +242,17 @@ fn decade_context(active: &str) -> &'static str {
     }
 }
 
-fn build_hero(h: &BearHistoryRow, kicker: &str, cur_year: i64) -> String {
+fn build_hero(h: &BearHistoryRow, kicker: &str, cur_year: i64, lang: &str) -> String {
     let year = h.year.unwrap_or(0) as i64;
     let title = esc(h.title.as_str());
-    let body_txt = esc(h
-        .significance
-        .as_deref()
-        .filter(|s| !s.is_empty())
-        .or(h.description.as_deref())
-        .unwrap_or(""));
+    let body_txt = esc(&crate::content_tx::tc(
+        h.significance
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or(h.description.as_deref())
+            .unwrap_or(""),
+        lang,
+    ));
     let cat = h.category.as_deref().unwrap_or("");
     let ago = if year > 0 && cur_year > year {
         format!(" &middot; {} years ago", cur_year - year)
@@ -293,6 +295,7 @@ fn build_hero(h: &BearHistoryRow, kicker: &str, cur_year: i64) -> String {
 pub(crate) fn build_timeline(
     entries: &[&BearHistoryRow],
     voices: &HashMap<i64, Vec<&CommunityStoryRow>>,
+    lang: &str,
 ) -> String {
     if entries.is_empty() {
         return format!(
@@ -303,8 +306,8 @@ pub(crate) fn build_timeline(
     entries.iter().map(|h| {
         let year  = h.year.unwrap_or(0) as i64;
         let title = esc(h.title.as_str());
-        let desc  = esc(h.description.as_deref().unwrap_or(""));
-        let sig   = esc(h.significance.as_deref().unwrap_or(""));
+        let desc  = esc(&crate::content_tx::tc(h.description.as_deref().unwrap_or(""), lang));
+        let sig   = esc(&crate::content_tx::tc(h.significance.as_deref().unwrap_or(""), lang));
         let cat   = h.category.as_deref().unwrap_or("milestone");
         let (cat_bg, cat_fg) = match cat {
             "title-competition" => ("#FBF0E0", ORANGE),

@@ -16,10 +16,13 @@ fn bucket_of(stype: &str) -> usize {
     }
 }
 
-fn digital_card(s: &DigitalSpaceRow, events_html: &str) -> String {
+fn digital_card(s: &DigitalSpaceRow, events_html: &str, lang: &str) -> String {
     let name = esc(s.name.as_str());
     let stype = esc(s.space_type.as_deref().unwrap_or(""));
-    let desc = esc(s.description.as_deref().unwrap_or(""));
+    let desc = esc(&crate::content_tx::tc(
+        s.description.as_deref().unwrap_or(""),
+        lang,
+    ));
     let url_s = esc(s.url.as_deref().unwrap_or(""));
     let ig = esc(s.instagram.as_deref().unwrap_or(""));
     let tt = esc(s.tiktok_handle.as_deref().unwrap_or(""));
@@ -166,7 +169,7 @@ pub(crate) async fn zone_digital(db: SupabaseClient, lang: &str) -> Response {
         }
         body.push_str(&sh(label, Some(group.len())));
         for &s in &group {
-            body.push_str(&digital_card(s, &events_html_for(s.id)));
+            body.push_str(&digital_card(s, &events_html_for(s.id), lang));
         }
     }
     Html(shell(

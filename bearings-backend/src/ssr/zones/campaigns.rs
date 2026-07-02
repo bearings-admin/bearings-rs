@@ -19,10 +19,13 @@ fn cause_color(cause: &str) -> &'static str {
     }
 }
 
-fn campaign_card(c: &CampaignRow) -> String {
+fn campaign_card(c: &CampaignRow, lang: &str) -> String {
     let name = esc(c.name.as_str());
     let org = esc(c.org.as_deref().unwrap_or(""));
-    let desc = esc(c.description.as_deref().unwrap_or(""));
+    let desc = esc(&crate::content_tx::tc(
+        c.description.as_deref().unwrap_or(""),
+        lang,
+    ));
     let curr = esc(c.currency.as_deref().unwrap_or("USD"));
     let cause = c.cause.as_deref().unwrap_or("");
 
@@ -90,8 +93,9 @@ pub(crate) async fn zone_campaigns(db: SupabaseClient, lang: &str) -> Response {
         .iter()
         .partition(|c| c.donate_url.as_deref().is_some_and(|u| !u.is_empty()));
 
-    let render =
-        |list: &[&CampaignRow]| -> String { list.iter().map(|&c| campaign_card(c)).collect() };
+    let render = |list: &[&CampaignRow]| -> String {
+        list.iter().map(|&c| campaign_card(c, lang)).collect()
+    };
 
     let mut body = format!("<h1 style=\"font-size:18px;font-weight:700;color:{BROWN};margin-bottom:4px\">Bears Taking Action</h1><p style=\"font-size:12px;color:{MID};margin-bottom:16px\">Community campaigns, grouped by cause. The bear community has quietly moved millions to HIV/AIDS care, refugee safety, elders and more \u{2014} mostly through events that give 100% of proceeds.</p>");
 
