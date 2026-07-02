@@ -38,7 +38,7 @@ pub(crate) async fn zone_future(db: SupabaseClient, lang: &str) -> Response {
     let camp_cards: String = campaigns.iter().map(|c| {
         let name   = esc(c.name.as_str());
         let org    = esc(c.org.as_deref().unwrap_or(""));
-        let desc   = esc(c.description.as_deref().unwrap_or(""));
+        let desc   = esc(&crate::content_tx::tc(c.description.as_deref().unwrap_or(""), lang));
         let link   = esc(c.link.as_deref().unwrap_or(""));
         let raised = c.raised.map(|x| x as i64);
         let goal   = c.goal.map(|x| x as i64);

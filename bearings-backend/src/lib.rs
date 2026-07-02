@@ -13,6 +13,7 @@
 
 pub mod cache;
 pub mod config;
+pub mod content_tx;
 pub mod db;
 pub mod error;
 pub mod i18n;
@@ -34,6 +35,27 @@ use axum::{
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
+
+/// Keep the content-translation cache warm from Supabase (once at startup, then every
+/// 5 min) so `content_tx::tc` is a pure in-memory lookup. Called from `main` before
+/// serving; a fetch failure just leaves the previous cache in place (render falls back
+/// to English for any missing string).
+pub fn spawn_content_refresh(db: db::SupabaseClient) {
+    tokio::spawn(async move {
+        loop {
+            if let Ok(rows) = db
+                .get_json::<Vec<content_tx::ContentTxRow>>(
+                    "content_translations?select=target_lang,source_text,\
+                     translated_text&limit=100000",
+                )
+                .await
+            {
+                content_tx::load(rows);
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+        }
+    });
+}
 
 /// Construct the Axum router with all routes and middleware wired in.
 ///

@@ -33,6 +33,8 @@ CREATE SEQUENCE IF NOT EXISTS code_id_seq;
 
 CREATE SEQUENCE IF NOT EXISTS competitions_id_seq;
 
+CREATE SEQUENCE IF NOT EXISTS content_translations_id_seq;
+
 CREATE SEQUENCE IF NOT EXISTS creator_event_links_id_seq;
 
 CREATE SEQUENCE IF NOT EXISTS creators_id_seq;
@@ -377,6 +379,18 @@ CREATE TABLE competitions (
     contact_social text,
     validator_notes text,
     outreach_status text DEFAULT 'not_started'::text,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE content_translations (
+    id bigint NOT NULL,
+    src_md5 text NOT NULL,
+    target_lang text NOT NULL,
+    source_text text NOT NULL,
+    translated_text text NOT NULL,
+    model text,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    UNIQUE (src_md5, target_lang),
     PRIMARY KEY (id)
 );
 
@@ -1000,6 +1014,8 @@ ALTER TABLE title_holders ADD CONSTRAINT title_holders_event_id_fkey FOREIGN KEY
 CREATE INDEX agent_actions_created_idx ON public.agent_actions USING btree (created_at DESC);
 
 CREATE INDEX artifacts_entity_idx ON public.artifacts USING btree (entity_type, entity_id);
+
+CREATE INDEX content_translations_lang_idx ON public.content_translations USING btree (target_lang);
 
 CREATE UNIQUE INDEX cth_title_year_uniq ON public.candidate_title_holders USING btree (title_name, year);
 
@@ -2097,6 +2113,8 @@ ALTER TABLE code ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE competitions ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE content_translations ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE creator_event_links ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE creators ENABLE ROW LEVEL SECURITY;
@@ -2222,6 +2240,8 @@ CREATE POLICY "Public update user_preferences" ON user_preferences AS PERMISSIVE
 CREATE POLICY "artifacts public read" ON artifacts AS PERMISSIVE FOR SELECT TO anon, authenticated USING (active);
 
 CREATE POLICY bear_regions_public_read ON bear_regions AS PERMISSIVE FOR SELECT TO public USING (true);
+
+CREATE POLICY content_translations_public_read ON content_translations AS PERMISSIVE FOR SELECT TO public USING (true);
 
 CREATE POLICY kindred_sources_public_read ON kindred_sources AS PERMISSIVE FOR SELECT TO public USING ((active = true));
 
